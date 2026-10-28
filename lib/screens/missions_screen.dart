@@ -4,6 +4,7 @@ import '../game/game_state.dart';
 import '../game/rules.dart';
 import '../i18n/strings.dart';
 import '../services/reminders.dart';
+import '../ui/cat_buddy.dart';
 import '../ui/pixel.dart';
 import '../ui/time_picker.dart';
 
@@ -179,6 +180,7 @@ class _MissionsScreenState extends State<MissionsScreen> {
             const SizedBox(height: 8),
             ...done.map(row),
           ],
+          CatBuddy(game: g),
         ],
       ),
     );
