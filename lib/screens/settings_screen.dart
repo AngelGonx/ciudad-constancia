@@ -62,6 +62,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ]),
                 ),
                 _Section(
+                  title: L.t('s.beta'),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(L.t('s.testMode'), style: T.body(14)),
+                    const SizedBox(height: 8),
+                    Wrap(spacing: 8, runSpacing: 8, children: [
+                      PixelChoice(label: L.t('s.on'), selected: g.cityUnlocked, onTap: () => g.setCityUnlocked(true)),
+                      PixelChoice(label: L.t('s.off'), selected: !g.cityUnlocked, onTap: () => g.setCityUnlocked(false)),
+                    ]),
+                  ]),
+                ),
+                _Section(
                   title: L.t('s.data'),
                   child: _confirmReset
                       ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

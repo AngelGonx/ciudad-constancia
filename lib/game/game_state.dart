@@ -133,6 +133,28 @@ class CityStats {
   bool get acceptsNewcomers => happiness >= 60 || population < 5;
 }
 
+/// Construcción colocada en el mapa.
+class Placed {
+  final int id;
+  final String type;
+  int x;
+  int y;
+  int color;
+  Placed({required this.id, required this.type, required this.x, required this.y, required this.color});
+
+  BuildingType get kind => buildingById(type);
+
+  Map<String, dynamic> toJson() => {'id': id, 'type': type, 'x': x, 'y': y, 'color': color};
+
+  factory Placed.fromJson(Map<String, dynamic> j) => Placed(
+        id: (j['id'] as num).toInt(),
+        type: j['type'] as String,
+        x: (j['x'] as num).toInt(),
+        y: (j['y'] as num).toInt(),
+        color: (j['color'] as num?)?.toInt() ?? buildingById(j['type'] as String).base,
+      );
+}
+
 class CompleteResult {
   final int xp;
   final int gold;
@@ -157,7 +179,10 @@ class GameState extends ChangeNotifier {
   int bestStreak = 0;
   bool isSample = false;
   Avatar avatar = Avatar();
-  List<String> buildings = ['hogar'];
+  /// La ciudad es la parte de paga. En la beta se desbloquea con el modo prueba.
+  bool cityUnlocked = false;
+  int mapSize = 8;
+  List<Placed> buildings = [];
   List<Task> tasks = [];
   Map<String, DayStat> history = {};
 
@@ -200,7 +225,9 @@ class GameState extends ChangeNotifier {
 
   Map<String, dynamic> _toJson() => {
         'language': language, 'lightTheme': lightTheme, 'name': name, 'xp': xp, 'gold': gold, 'population': population, 'totalDone': totalDone,
-        'bestStreak': bestStreak, 'isSample': isSample, 'avatar': avatar.toJson(), 'buildings': buildings,
+        'bestStreak': bestStreak, 'isSample': isSample, 'avatar': avatar.toJson(),
+        'cityUnlocked': cityUnlocked, 'mapSize': mapSize,
+        'buildings': buildings.map((b) => b.toJson()).toList(),
         'tasks': tasks.map((t) => t.toJson()).toList(),
         'history': history.map((k, v) => MapEntry(k, v.toJson())),
       };
@@ -216,7 +243,18 @@ class GameState extends ChangeNotifier {
     bestStreak = (j['bestStreak'] as num?)?.toInt() ?? 0;
     isSample = j['isSample'] as bool? ?? false;
     avatar = Avatar.fromJson((j['avatar'] as Map?)?.cast<String, dynamic>() ?? {});
-    buildings = ((j['buildings'] as List?) ?? ['hogar']).map((e) => e as String).toList();
+    cityUnlocked = j['cityUnlocked'] as bool? ?? false;
+    mapSize = (j['mapSize'] as num?)?.toInt() ?? mapExpansions.first.size;
+    buildings = [];
+    for (final e in (j['buildings'] as List?) ?? const ['hogar']) {
+      if (e is Map) {
+        buildings.add(Placed.fromJson(e.cast<String, dynamic>()));
+      } else if (e is String) {
+        // Versiones anteriores guardaban solo el tipo; se acomoda en el primer lugar libre.
+        _addAtFreeSpot(e, buildingById(e).base);
+      }
+    }
+    if (!buildings.any((b) => b.type == 'hogar')) _addAtFreeSpot('hogar', homeBuilding.base);
     tasks = ((j['tasks'] as List?) ?? [])
         .map((e) => Task.fromJson((e as Map).cast<String, dynamic>()))
         .toList();
@@ -233,7 +271,13 @@ class GameState extends ChangeNotifier {
     population = 4;
     totalDone = 41;
     bestStreak = 6;
-    buildings = ['hogar', 'casa', 'tiendita', 'pozo', 'poste'];
+    mapSize = mapExpansions.first.size;
+    buildings = [];
+    const layout = [['hogar', 3, 4], ['casa', 2, 4], ['tiendita', 5, 3], ['pozo', 4, 2], ['poste', 5, 5]];
+    for (final l in layout) {
+      final type = l[0] as String;
+      buildings.add(Placed(id: _newBuildingId(), type: type, x: l[1] as int, y: l[2] as int, color: buildingById(type).base));
+    }
     history = {};
     const week = [[420, 70], [780, 135], [300, 55], [950, 160], [600, 100], [520, 90]];
     for (var i = 0; i < week.length; i++) {
@@ -260,7 +304,8 @@ class GameState extends ChangeNotifier {
     population = 1;
     totalDone = 0;
     bestStreak = 0;
-    buildings = ['hogar'];
+    mapSize = mapExpansions.first.size;
+    buildings = [Placed(id: _newBuildingId(), type: 'hogar', x: 3, y: 3, color: homeBuilding.base)];
     tasks = [];
     history = {today(): DayStat()};
     _commit();
@@ -275,8 +320,8 @@ class GameState extends ChangeNotifier {
 
   CityStats city() {
     final cap = <String, int>{for (final k in [...needKeys, 'felicidad']) k: 0};
-    for (final id in buildings) {
-      buildingById(id).capacity.forEach((k, v) => cap[k] = (cap[k] ?? 0) + v);
+    for (final b in buildings) {
+      b.kind.capacity.forEach((k, v) => cap[k] = (cap[k] ?? 0) + v);
     }
     final p = population;
     final need = <String, int>{
@@ -297,7 +342,112 @@ class GameState extends ChangeNotifier {
     return CityStats(cap, need, p, happiness, bonus);
   }
 
-  bool get hasPalace => buildings.contains('palacio');
+  bool get hasPalace => buildings.any((b) => b.type == 'palacio');
+
+  // ---------- mapa ----------
+
+  int _newBuildingId() => buildings.fold<int>(0, (m, b) => max(m, b.id)) + 1;
+
+  Placed? buildingAt(int x, int y) {
+    for (final b in buildings) {
+      if (b.x == x && b.y == y) return b;
+    }
+    return null;
+  }
+
+  Placed? placedById(int id) {
+    for (final b in buildings) {
+      if (b.id == id) return b;
+    }
+    return null;
+  }
+
+  bool canPlace(int x, int y, {int? ignoreId}) {
+    if (x < 0 || y < 0 || x >= mapSize || y >= mapSize) return false;
+    final other = buildingAt(x, y);
+    return other == null || other.id == ignoreId;
+  }
+
+  /// Busca un lugar libre empezando por el centro del mapa.
+  void _addAtFreeSpot(String type, int color) {
+    final c = mapSize ~/ 2;
+    for (var r = 0; r < mapSize; r++) {
+      for (var y = c - r; y <= c + r; y++) {
+        for (var x = c - r; x <= c + r; x++) {
+          if (canPlace(x, y)) {
+            buildings.add(Placed(id: _newBuildingId(), type: type, x: x, y: y, color: color));
+            return;
+          }
+        }
+      }
+    }
+    // Sin espacio: se agranda el terreno un poco.
+    mapSize += 2;
+    _addAtFreeSpot(type, color);
+  }
+
+  MapExpansion? get nextExpansion {
+    for (final e in mapExpansions) {
+      if (e.size > mapSize) return e;
+    }
+    return null;
+  }
+
+  String? expansionBlock(MapExpansion e) {
+    if (level < e.level) return L.f('c.reasonLevel', {'n': e.level});
+    if (gold < e.cost) return L.t('c.reasonGold');
+    return null;
+  }
+
+  bool expand() {
+    final e = nextExpansion;
+    if (e == null || expansionBlock(e) != null) return false;
+    gold -= e.cost;
+    mapSize = e.size;
+    _commit();
+    return true;
+  }
+
+  bool place(BuildingType type, int color, int x, int y) {
+    if (blockReason(type) != null || !canPlace(x, y)) return false;
+    gold -= type.cost;
+    buildings.add(Placed(id: _newBuildingId(), type: type.id, x: x, y: y, color: color));
+    _commit();
+    return true;
+  }
+
+  bool moveBuilding(int id, int x, int y) {
+    final b = placedById(id);
+    if (b == null || !canPlace(x, y, ignoreId: id)) return false;
+    b.x = x;
+    b.y = y;
+    _commit();
+    return true;
+  }
+
+  /// Demuele y devuelve parte del oro. Regresa el oro devuelto, o -1 si no se puede.
+  int demolish(int id) {
+    final b = placedById(id);
+    if (b == null || !b.kind.demolishable) return -1;
+    final refund = (b.kind.cost * demolishRefund).round();
+    buildings.remove(b);
+    gold += refund;
+    population = max(1, min(population, city().housing));
+    _commit();
+    return refund;
+  }
+
+  void recolor(int id, int color) {
+    final b = placedById(id);
+    if (b == null) return;
+    b.color = color;
+    _commit();
+  }
+
+  void setCityUnlocked(bool value) {
+    cityUnlocked = value;
+    _commit();
+  }
 
   // ---------- acciones ----------
 
@@ -373,7 +523,7 @@ class GameState extends ChangeNotifier {
   /// Motivo por el que no se puede construir, o null si sí se puede.
   String? blockReason(BuildingType b) {
     if (level < b.level) return L.f('c.reasonLevel', {'n': b.level});
-    if (b.unique && buildings.contains(b.id)) return L.t('c.reasonBuilt');
+    if (b.unique && buildings.any((p) => p.type == b.id)) return L.t('c.reasonBuilt');
     if (b.id == 'palacio') {
       final c = city();
       if (c.happiness < palaceHappiness) return L.f('c.reasonHappy', {'n': palaceHappiness});
@@ -381,14 +531,6 @@ class GameState extends ChangeNotifier {
     }
     if (gold < b.cost) return L.t('c.reasonGold');
     return null;
-  }
-
-  bool build(BuildingType b) {
-    if (blockReason(b) != null) return false;
-    gold -= b.cost;
-    buildings.add(b.id);
-    _commit();
-    return true;
   }
 
   /// Elige idioma. En el primer inicio, los datos de ejemplo se rehacen en ese idioma.
