@@ -124,14 +124,17 @@ class _TabButton extends StatelessWidget {
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 10),
-          alignment: Alignment.center,
           decoration: BoxDecoration(
             color: selected ? C.bg : Colors.transparent,
             border: Border.all(color: selected ? C.ink : Colors.transparent, width: 3),
           ),
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(label, style: T.display(11, selected ? C.gold : C.dim)),
+          // heightFactor: 1 hace que el botón mida lo que su texto, sin estirarse.
+          child: Align(
+            heightFactor: 1,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(label, style: T.display(11, selected ? C.gold : C.dim)),
+            ),
           ),
         ),
       ),
