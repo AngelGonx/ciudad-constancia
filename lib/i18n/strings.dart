@@ -349,6 +349,8 @@ const Map<String, String> _es = {
   's.dailyAt': 'Aviso diario a las {t}',
   's.change': 'Cambiar hora',
   's.test': 'Probar aviso',
+  's.exact': 'Avisos a la hora exacta',
+  's.exactText': 'Tus avisos pueden llegar con unos minutos de margen. Si los quieres al minuto, permite la hora exacta (opcional).',
 
   // Primer inicio
   'lang.title': 'Elige tu idioma',
@@ -677,6 +679,8 @@ const Map<String, String> _en = {
   's.dailyAt': 'Daily alert at {t}',
   's.change': 'Change time',
   's.test': 'Test alert',
+  's.exact': 'Exact-time alerts',
+  's.exactText': 'Your alerts may arrive a few minutes late. If you want them right on time, allow exact timing (optional).',
 
   'lang.title': 'Choose your language',
 

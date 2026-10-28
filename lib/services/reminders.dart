@@ -35,18 +35,33 @@ class Reminders {
   static AndroidFlutterLocalNotificationsPlugin? get _android =>
       _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
 
-  /// Pide permiso de notificaciones (Android 13+) y de alarmas exactas para que
-  /// los avisos lleguen a la hora justa. Regresa false si se negaron las notificaciones.
+  /// Pide permiso de notificaciones (Android 13+): una sola ventanita del sistema.
+  /// Regresa false si se negó.
   static Future<bool> requestPermission() async {
     if (!_ready) return false;
     try {
-      final ok = await _android?.requestNotificationsPermission() ?? true;
-      final exact = await _android?.canScheduleExactNotifications() ?? true;
-      if (!exact) await _android?.requestExactAlarmsPermission();
-      return ok;
+      return await _android?.requestNotificationsPermission() ?? true;
     } catch (_) {
       return false;
     }
+  }
+
+  /// Si el teléfono permite avisos a la hora exacta. Sin esto llegan con unos minutos de margen.
+  static Future<bool> canBeExact() async {
+    if (!_ready) return true;
+    try {
+      return await _android?.canScheduleExactNotifications() ?? true;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  /// Opcional: abre el ajuste del sistema para permitir avisos a la hora exacta.
+  static Future<void> askExact(GameState g) async {
+    try {
+      await _android?.requestExactAlarmsPermission();
+    } catch (_) {}
+    scheduleSoon(g);
   }
 
   /// Activa los recordatorios (pidiendo permiso) si todavía estaban apagados.

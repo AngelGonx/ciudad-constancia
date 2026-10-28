@@ -102,6 +102,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                         PixelButton(label: L.t('s.test'), onPressed: Reminders.showTest),
                       ]),
+                      FutureBuilder<bool>(
+                        future: Reminders.canBeExact(),
+                        builder: (context, snap) {
+                          if (snap.data != false) return const SizedBox.shrink();
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 12),
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Text(L.t('s.exactText'), style: T.body(13, C.dim)),
+                              const SizedBox(height: 8),
+                              PixelButton(
+                                label: L.t('s.exact'),
+                                color: C.panel2,
+                                textColor: C.fg,
+                                onPressed: () => Reminders.askExact(g),
+                              ),
+                            ]),
+                          );
+                        },
+                      ),
                     ],
                   ]),
                 ),
