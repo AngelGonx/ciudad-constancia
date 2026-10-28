@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../i18n/strings.dart';
+import 'achievements.dart';
 import 'rules.dart';
 
 String dayKey(DateTime d) =>
@@ -26,6 +27,9 @@ class Task {
   int earnedGold;
   int earnedPeople;
 
+  /// Minutos desde medianoche para el recordatorio, o null si no tiene.
+  int? reminder;
+
   Task({
     required this.id,
     required this.title,
@@ -39,6 +43,7 @@ class Task {
     this.earnedXp = 0,
     this.earnedGold = 0,
     this.earnedPeople = 0,
+    this.reminder,
   });
 
   bool get isHabit => kind == 'habito';
@@ -50,7 +55,7 @@ class Task {
   Map<String, dynamic> toJson() => {
         'id': id, 'title': title, 'kind': kind, 'diff': diff, 'streak': streak,
         'last': last, 'done': done, 'prevLast': prevLast, 'prevStreak': prevStreak,
-        'earnedXp': earnedXp, 'earnedGold': earnedGold, 'earnedPeople': earnedPeople,
+        'earnedXp': earnedXp, 'earnedGold': earnedGold, 'earnedPeople': earnedPeople, 'reminder': reminder,
       };
 
   factory Task.fromJson(Map<String, dynamic> j) => Task(
@@ -66,6 +71,7 @@ class Task {
         earnedXp: (j['earnedXp'] as num?)?.toInt() ?? 0,
         earnedGold: (j['earnedGold'] as num?)?.toInt() ?? 0,
         earnedPeople: (j['earnedPeople'] as num?)?.toInt() ?? 0,
+        reminder: (j['reminder'] as num?)?.toInt(),
       );
 }
 
@@ -115,10 +121,14 @@ class Avatar {
 class DayStat {
   int xp;
   int gold;
-  DayStat({this.xp = 0, this.gold = 0});
-  Map<String, dynamic> toJson() => {'xp': xp, 'gold': gold};
-  factory DayStat.fromJson(Map<String, dynamic> j) =>
-      DayStat(xp: (j['xp'] as num?)?.toInt() ?? 0, gold: (j['gold'] as num?)?.toInt() ?? 0);
+  int happy; // felicidad más alta de la ciudad ese día
+  DayStat({this.xp = 0, this.gold = 0, this.happy = 0});
+  Map<String, dynamic> toJson() => {'xp': xp, 'gold': gold, 'happy': happy};
+  factory DayStat.fromJson(Map<String, dynamic> j) => DayStat(
+        xp: (j['xp'] as num?)?.toInt() ?? 0,
+        gold: (j['gold'] as num?)?.toInt() ?? 0,
+        happy: (j['happy'] as num?)?.toInt() ?? 0,
+      );
 }
 
 class CityStats {
@@ -179,8 +189,20 @@ class GameState extends ChangeNotifier {
   int bestStreak = 0;
   bool isSample = false;
   Avatar avatar = Avatar();
-  /// La ciudad es la parte de paga. En la beta se desbloquea con el modo prueba.
-  bool cityUnlocked = false;
+  /// La ciudad (y con ella logros y cosméticos) es la parte de paga.
+  bool cityPurchased = false;
+
+  /// Modo prueba de la beta: desbloquea la ciudad sin comprar.
+  bool testMode = false;
+  bool get cityUnlocked => cityPurchased || testMode;
+
+  Set<String> unlockedAchievements = {};
+
+  /// Logros recién ganados que la interfaz todavía no ha mostrado.
+  final List<String> pendingAchievements = [];
+
+  bool remindersOn = false;
+  int reminderMinutes = 20 * 60; // recordatorio diario a las 8:00 p. m.
   int mapSize = 8;
   List<Placed> buildings = [];
   List<Task> tasks = [];
@@ -218,15 +240,44 @@ class GameState extends ChangeNotifier {
     }
   }
 
+  /// Se llama después de cada cambio guardado (lo usa el servicio de recordatorios).
+  void Function(GameState)? onChanged;
+
   void _commit() {
+    if (cityUnlocked) {
+      final h = todayStat;
+      h.happy = max(h.happy, city().happiness);
+      _checkAchievements();
+    }
     notifyListeners();
     _save();
+    onChanged?.call(this);
+  }
+
+  void _checkAchievements() {
+    for (final a in achievements) {
+      if (unlockedAchievements.contains(a.id)) continue;
+      if (metricValue(this, a.metric) >= a.goal) {
+        unlockedAchievements.add(a.id);
+        gold += a.gold;
+        pendingAchievements.add(a.id);
+      }
+    }
+  }
+
+  /// Un accesorio está disponible si es gratis o si ya se ganó su logro con la ciudad desbloqueada.
+  bool hasCosmetic(String id) {
+    if (freeAccessories.contains(id)) return true;
+    final a = achievementForCosmetic(id);
+    return a != null && cityUnlocked && unlockedAchievements.contains(a.id);
   }
 
   Map<String, dynamic> _toJson() => {
         'language': language, 'lightTheme': lightTheme, 'name': name, 'xp': xp, 'gold': gold, 'population': population, 'totalDone': totalDone,
         'bestStreak': bestStreak, 'isSample': isSample, 'avatar': avatar.toJson(),
-        'cityUnlocked': cityUnlocked, 'mapSize': mapSize,
+        'cityUnlocked': testMode, 'cityPurchased': cityPurchased, 'mapSize': mapSize,
+        'achievements': unlockedAchievements.toList(),
+        'remindersOn': remindersOn, 'reminderMinutes': reminderMinutes,
         'buildings': buildings.map((b) => b.toJson()).toList(),
         'tasks': tasks.map((t) => t.toJson()).toList(),
         'history': history.map((k, v) => MapEntry(k, v.toJson())),
@@ -243,7 +294,11 @@ class GameState extends ChangeNotifier {
     bestStreak = (j['bestStreak'] as num?)?.toInt() ?? 0;
     isSample = j['isSample'] as bool? ?? false;
     avatar = Avatar.fromJson((j['avatar'] as Map?)?.cast<String, dynamic>() ?? {});
-    cityUnlocked = j['cityUnlocked'] as bool? ?? false;
+    testMode = j['cityUnlocked'] as bool? ?? false;
+    cityPurchased = j['cityPurchased'] as bool? ?? false;
+    unlockedAchievements = ((j['achievements'] as List?) ?? const []).map((e) => e as String).toSet();
+    remindersOn = j['remindersOn'] as bool? ?? false;
+    reminderMinutes = (j['reminderMinutes'] as num?)?.toInt() ?? 20 * 60;
     mapSize = (j['mapSize'] as num?)?.toInt() ?? mapExpansions.first.size;
     buildings = [];
     for (final e in (j['buildings'] as List?) ?? const ['hogar']) {
@@ -444,15 +499,36 @@ class GameState extends ChangeNotifier {
     _commit();
   }
 
-  void setCityUnlocked(bool value) {
-    cityUnlocked = value;
+  void setTestMode(bool value) {
+    testMode = value;
+    _commit();
+  }
+
+  void setCityPurchased(bool value) {
+    if (cityPurchased == value) return;
+    cityPurchased = value;
+    _commit();
+  }
+
+  void setReminders(bool on) {
+    remindersOn = on;
+    _commit();
+  }
+
+  void setReminderMinutes(int minutes) {
+    reminderMinutes = minutes % (24 * 60);
+    _commit();
+  }
+
+  void setTaskReminder(Task t, int? minutes) {
+    t.reminder = minutes;
     _commit();
   }
 
   // ---------- acciones ----------
 
-  void addTask(String title, String kind, String diff) {
-    tasks.insert(0, Task(id: _newId(), title: title, kind: kind, diff: diff));
+  void addTask(String title, String kind, String diff, {int? reminder}) {
+    tasks.insert(0, Task(id: _newId(), title: title, kind: kind, diff: diff, reminder: reminder));
     _commit();
   }
 

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../game/game_state.dart';
 import '../game/rules.dart';
 import '../i18n/strings.dart';
+import '../services/store.dart';
 import '../ui/building_art.dart';
 import '../ui/city_view.dart';
 import '../ui/color_picker.dart';
@@ -289,6 +290,12 @@ class _Shop extends StatelessWidget {
           padding: const EdgeInsets.only(top: 10, bottom: 6),
           child: Text(categoryName(b.category).toUpperCase(), style: T.display(11, C.gold).copyWith(letterSpacing: 1)),
         ));
+        if (b.category == 'transporte') {
+          items.add(Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text(L.t('c.busHint'), style: T.body(13, C.dim)),
+          ));
+        }
       }
       final reason = game.blockReason(b);
       final locked = game.level < b.level;
@@ -715,10 +722,38 @@ class _LockedCity extends StatelessWidget {
           ]),
         ),
         const SizedBox(height: 16),
-        PixelButton(label: L.t('lock.buy'), onPressed: null),
+        ListenableBuilder(
+          listenable: Store.instance,
+          builder: (context, _) {
+            final store = Store.instance;
+            final price = store.product?.price;
+            return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              PixelButton(
+                label: store.busy
+                    ? L.t('lock.busy')
+                    : (price == null ? L.t('lock.buy') : L.f('lock.buyPrice', {'p': price})),
+                onPressed: store.canBuy ? store.buy : null,
+              ),
+              const SizedBox(height: 10),
+              if (store.available)
+                PixelButton(
+                  label: L.t('lock.restore'),
+                  color: C.panel2,
+                  textColor: C.fg,
+                  onPressed: store.busy ? null : store.restore,
+                ),
+              if (store.error != null) ...[
+                const SizedBox(height: 8),
+                Text(L.f('lock.error', {'e': store.error!}), style: T.body(13, C.bad)),
+              ],
+              if (!store.canBuy && !store.busy) ...[
+                const SizedBox(height: 8),
+                Text(L.t('lock.soon'), style: T.body(13, C.dim)),
+              ],
+            ]);
+          },
+        ),
         const SizedBox(height: 8),
-        Text(L.t('lock.soon'), style: T.body(13, C.dim)),
-        const SizedBox(height: 4),
         Text(L.t('lock.beta'), style: T.body(13, C.dim)),
       ],
     );

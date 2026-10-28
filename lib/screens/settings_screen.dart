@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../game/game_state.dart';
 import '../i18n/strings.dart';
+import '../services/reminders.dart';
 import '../ui/pixel.dart';
+import '../ui/time_picker.dart';
 
 /// Pantalla del engranaje: estudio, idioma, tema y datos.
 class SettingsScreen extends StatefulWidget {
@@ -62,13 +64,55 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ]),
                 ),
                 _Section(
+                  title: L.t('s.reminders'),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(L.t('s.remindersText'), style: T.body(14, C.dim)),
+                    const SizedBox(height: 10),
+                    Wrap(spacing: 8, runSpacing: 8, children: [
+                      PixelChoice(
+                        label: L.t('s.on'),
+                        selected: g.remindersOn,
+                        onTap: () async {
+                          final ok = await Reminders.requestPermission();
+                          g.setReminders(true);
+                          if (!ok && context.mounted) showToast(context, L.t('r.denied'));
+                        },
+                      ),
+                      PixelChoice(label: L.t('s.off'), selected: !g.remindersOn, onTap: () => g.setReminders(false)),
+                    ]),
+                    if (g.remindersOn) ...[
+                      const SizedBox(height: 12),
+                      Row(children: [
+                        const PixelBell(size: 16),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(L.f('s.dailyAt', {'t': formatMinutes(g.reminderMinutes)}), style: T.body(15)),
+                        ),
+                      ]),
+                      const SizedBox(height: 10),
+                      Wrap(spacing: 8, runSpacing: 8, children: [
+                        PixelButton(
+                          label: L.t('s.change'),
+                          color: C.panel2,
+                          textColor: C.fg,
+                          onPressed: () async {
+                            final choice = await pickTime(context, g.reminderMinutes);
+                            if (choice?.minutes != null) g.setReminderMinutes(choice!.minutes!);
+                          },
+                        ),
+                        PixelButton(label: L.t('s.test'), onPressed: Reminders.showTest),
+                      ]),
+                    ],
+                  ]),
+                ),
+                _Section(
                   title: L.t('s.beta'),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text(L.t('s.testMode'), style: T.body(14)),
                     const SizedBox(height: 8),
                     Wrap(spacing: 8, runSpacing: 8, children: [
-                      PixelChoice(label: L.t('s.on'), selected: g.cityUnlocked, onTap: () => g.setCityUnlocked(true)),
-                      PixelChoice(label: L.t('s.off'), selected: !g.cityUnlocked, onTap: () => g.setCityUnlocked(false)),
+                      PixelChoice(label: L.t('s.on'), selected: g.testMode, onTap: () => g.setTestMode(true)),
+                      PixelChoice(label: L.t('s.off'), selected: !g.testMode, onTap: () => g.setTestMode(false)),
                     ]),
                   ]),
                 ),

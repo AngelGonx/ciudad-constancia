@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../game/achievements.dart';
 import '../game/game_state.dart';
 import '../i18n/strings.dart';
 import '../ui/color_picker.dart';
@@ -114,7 +115,35 @@ class _AvatarScreenState extends State<AvatarScreen> {
           option(L.t('a.hairColor'), colors(hairColors, a.hairColor, (av, c) => av.hairColor = c)),
           option(L.t('a.shirt'), colors(clothColors, a.shirt, (av, c) => av.shirt = c)),
           option(L.t('a.pants'), colors(clothColors, a.pants, (av, c) => av.pants = c)),
-          option(L.t('a.accessory'), texts(accessories, 'acc', a.accessory, (av, v) => av.accessory = v)),
+          option(
+            L.t('a.accessory'),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              for (final id in accessories)
+                if (g.hasCosmetic(id))
+                  PixelChoice(
+                    label: L.t('acc.$id'),
+                    selected: id == a.accessory,
+                    onTap: () => g.updateAvatar((av) => av.accessory = id),
+                  )
+                else
+                  Opacity(
+                    opacity: 0.45,
+                    child: PixelChoice(
+                      label: '? ${L.t('acc.$id')}',
+                      selected: false,
+                      onTap: () {
+                        final ach = achievementForCosmetic(id);
+                        showToast(
+                          context,
+                          g.cityUnlocked && ach != null
+                              ? L.f('ach.lockedCosmetic', {'name': L.t('ach.${ach.id}')})
+                              : L.t('ach.needsFull'),
+                        );
+                      },
+                    ),
+                  ),
+            ]),
+          ),
         ],
       ),
     );

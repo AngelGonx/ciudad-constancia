@@ -4,6 +4,7 @@ import '../game/game_state.dart';
 import '../game/rules.dart';
 import '../i18n/strings.dart';
 import '../ui/pixel.dart';
+import '../ui/time_picker.dart';
 
 class MissionsScreen extends StatefulWidget {
   final GameState game;
@@ -18,6 +19,7 @@ class _MissionsScreenState extends State<MissionsScreen> {
   final _titleFocus = FocusNode();
   String _kind = 'habito';
   String _diff = 'media';
+  int? _reminder;
 
   @override
   void dispose() {
@@ -31,9 +33,18 @@ class _MissionsScreenState extends State<MissionsScreen> {
   void _add() {
     final text = _title.text.trim();
     if (text.isEmpty) return;
-    widget.game.addTask(text, _kind, _diff);
+    widget.game.addTask(text, _kind, _diff, reminder: _reminder);
+    if (_reminder != null && !widget.game.remindersOn) showToast(context, L.t('r.needOn'));
     _title.clear();
+    setState(() => _reminder = null);
     _hideKeyboard();
+  }
+
+  Future<void> _editReminder(Task t) async {
+    final choice = await pickTime(context, t.reminder ?? 9 * 60, allowRemove: t.reminder != null);
+    if (choice == null || !mounted) return;
+    widget.game.setTaskReminder(t, choice.removed ? null : choice.minutes);
+    if (!choice.removed && !widget.game.remindersOn) showToast(context, L.t('r.needOn'));
   }
 
   void _toggle(Task t) {
@@ -72,7 +83,12 @@ class _MissionsScreenState extends State<MissionsScreen> {
     final goldToday = g.goldToday;
     final record = g.goldRecord;
 
-    Widget row(Task t) => _TaskRow(task: t, onToggle: () => _toggle(t), onDelete: () => g.deleteTask(t));
+    Widget row(Task t) => _TaskRow(
+          task: t,
+          onToggle: () => _toggle(t),
+          onDelete: () => g.deleteTask(t),
+          onReminder: () => _editReminder(t),
+        );
 
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
@@ -115,8 +131,10 @@ class _MissionsScreenState extends State<MissionsScreen> {
             focusNode: _titleFocus,
             kind: _kind,
             diff: _diff,
+            reminder: _reminder,
             onKind: (v) => setState(() => _kind = v),
             onDiff: (v) => setState(() => _diff = v),
+            onReminder: (v) => setState(() => _reminder = v),
             onSubmit: _add,
           ),
           const SizedBox(height: 20),
@@ -163,16 +181,20 @@ class _AddForm extends StatelessWidget {
   final FocusNode focusNode;
   final String kind;
   final String diff;
+  final int? reminder;
   final ValueChanged<String> onKind;
   final ValueChanged<String> onDiff;
+  final ValueChanged<int?> onReminder;
   final VoidCallback onSubmit;
   const _AddForm({
     required this.controller,
     required this.focusNode,
     required this.kind,
     required this.diff,
+    required this.reminder,
     required this.onKind,
     required this.onDiff,
+    required this.onReminder,
     required this.onSubmit,
   });
 
@@ -209,6 +231,20 @@ class _AddForm extends StatelessWidget {
             for (final e in difficulties.values)
               PixelChoice(label: e.name, selected: diff == e.id, onTap: () => onDiff(e.id)),
           ]),
+          const SizedBox(height: 12),
+          Text(L.t('r.reminder'), style: T.body(13, C.dim)),
+          const SizedBox(height: 6),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            PixelChoice(label: L.t('r.none'), selected: reminder == null, onTap: () => onReminder(null)),
+            PixelChoice(
+              label: reminder == null ? '+ ${L.t('r.hour')}' : formatMinutes(reminder!),
+              selected: reminder != null,
+              onTap: () async {
+                final choice = await pickTime(context, reminder ?? 9 * 60);
+                if (choice != null && !choice.removed) onReminder(choice.minutes);
+              },
+            ),
+          ]),
           const SizedBox(height: 14),
           Row(children: [
             Expanded(child: Text(L.f('m.reward', {'xp': d.xp, 'gold': d.gold}), style: T.body(13, C.dim))),
@@ -225,7 +261,8 @@ class _TaskRow extends StatelessWidget {
   final Task task;
   final VoidCallback onToggle;
   final VoidCallback onDelete;
-  const _TaskRow({required this.task, required this.onToggle, required this.onDelete});
+  final VoidCallback onReminder;
+  const _TaskRow({required this.task, required this.onToggle, required this.onDelete, required this.onReminder});
 
   @override
   Widget build(BuildContext context) {
@@ -270,6 +307,26 @@ class _TaskRow extends StatelessWidget {
                   PixelChip(d.name, color: C.forDifficulty(d.id)),
                   Text(L.f('m.gain', {'xp': d.xp, 'gold': d.gold}), style: T.body(12, C.dim)),
                   if (streak > 0) PixelChip(L.f('m.streak', {'n': streak}), color: C.bad, textColor: C.fg),
+                  Semantics(
+                    button: true,
+                    label: L.t('r.reminder'),
+                    child: GestureDetector(
+                      onTap: onReminder,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: task.reminder != null ? C.gold : C.panel, width: 2),
+                        ),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          PixelBell(size: 10, color: task.reminder != null ? C.gold : C.dim),
+                          if (task.reminder != null) ...[
+                            const SizedBox(width: 4),
+                            Text(formatMinutes(task.reminder!), style: T.display(10, C.gold)),
+                          ],
+                        ]),
+                      ),
+                    ),
+                  ),
                 ]),
               ]),
             ),

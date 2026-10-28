@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../game/game_state.dart';
+import '../game/roads.dart';
 import '../game/rules.dart';
 import 'building_art.dart';
 import 'sprites.dart';
@@ -58,30 +59,57 @@ class CityMap extends StatefulWidget {
   State<CityMap> createState() => CityMapState();
 }
 
-/// Algo que camina por el mapa; x, y es la posición de los pies en píxeles lógicos.
+/// Algo que se mueve por el mapa siguiendo puntos (en píxeles lógicos).
 class _Mover {
   double x, y;
+  List<Offset> path = [];
   _Mover(this.x, this.y);
+
+  /// Avanza [step] píxeles por el camino. Regresa true cuando ya no quedan puntos.
+  bool advance(double step) {
+    var left = step;
+    while (path.isNotEmpty && left > 0) {
+      final t = path.first;
+      final dx = t.dx - x, dy = t.dy - y;
+      final dist = dx.abs() + dy.abs();
+      if (dist <= left) {
+        x = t.dx;
+        y = t.dy;
+        left -= dist;
+        path.removeAt(0);
+      } else {
+        // Movimiento en un solo eje a la vez, como en una cuadrícula.
+        if (dx.abs() > 0.01) {
+          x += dx.sign * min(left, dx.abs());
+        } else {
+          y += dy.sign * min(left, dy.abs());
+        }
+        left = 0;
+      }
+    }
+    return path.isEmpty;
+  }
 }
 
 class _Walker extends _Mover {
-  int homeId;
+  final int homeId;
   int? destId;
   int state; // 0 en casa, 1 yendo, 2 dentro del destino, 3 regresando
   double wait;
   final double speed;
+  final double side; // de qué banqueta camina
   final Color skin, shirt;
-  _Walker(super.x, super.y, this.homeId, this.speed, this.skin, this.shirt)
+  _Walker(super.x, super.y, this.homeId, this.speed, this.side, this.skin, this.shirt)
       : state = 0,
         wait = 0;
 }
 
-class _Truck extends _Mover {
-  final int stationId;
-  List<int> route = [];
-  bool home = true;
+class _Vehicle extends _Mover {
+  final int baseId; // estación del camión o primera parada del autobús
+  bool parked = true;
   double wait;
-  _Truck(this.stationId, super.x, super.y, this.wait);
+  int stopIndex = 0;
+  _Vehicle(this.baseId, super.x, super.y, this.wait);
 }
 
 class CityMapState extends State<CityMap> with SingleTickerProviderStateMixin {
@@ -93,8 +121,11 @@ class CityMapState extends State<CityMap> with SingleTickerProviderStateMixin {
   bool _fitted = false;
   Size _viewport = Size.zero;
 
+  RoadNetwork? _net;
+  String _netSig = '';
   List<_Walker> _walkers = [];
-  List<_Truck> _trucks = [];
+  List<_Vehicle> _trucks = [];
+  _Vehicle? _bus;
   _Walker? _mayor;
   String _signature = '';
 
@@ -118,14 +149,42 @@ class CityMapState extends State<CityMap> with SingleTickerProviderStateMixin {
 
   Map<int, Placed> get _byId => {for (final b in widget.buildings) b.id: b};
 
-  /// Puerta de una construcción: abajo al centro de su cuadro.
-  Offset _door(Placed b) => Offset(b.x * tile + 9.0, b.y * tile + _topPad + 17.0);
+  RoadNetwork get net {
+    final sig = RoadNetwork.signature(widget.buildings, widget.mapSize);
+    if (_net == null || sig != _netSig) {
+      _net = RoadNetwork.build(widget.buildings, widget.mapSize);
+      _netSig = sig;
+    }
+    return _net!;
+  }
 
-  // ---------- vecinos ----------
+  /// Centro de un cuadro, en píxeles lógicos.
+  Offset _center(int k) {
+    final n = net;
+    return Offset(n.xOf(k) * tile + 9.0, n.yOf(k) * tile + _topPad + 9.0);
+  }
+
+  /// Puntos para ir de la entrada de [from] a la entrada de [to]. Con [side] se va por la banqueta.
+  List<Offset>? _route(int fromId, int toId, double side) {
+    final n = net;
+    final a = n.entrances[fromId], b = n.entrances[toId];
+    if (a == null || b == null) return null;
+    final tiles = n.path(a, b);
+    if (tiles == null) return null;
+    final off = Offset(side * 6, side * 6);
+    return [for (final k in tiles) _center(k) + off];
+  }
+
+  Offset? _entrancePoint(int id, double side) {
+    final k = net.entrances[id];
+    if (k == null) return null;
+    return _center(k) + Offset(side * 6, side * 6);
+  }
+
+  // ---------- vecinos y vehículos ----------
 
   void _sync() {
-    final sig = '${widget.population}|${widget.mapSize}|'
-        '${widget.buildings.map((b) => '${b.id}:${b.x},${b.y}').join(';')}';
+    final sig = '${widget.population}|${RoadNetwork.signature(widget.buildings, widget.mapSize)}';
     if (sig == _signature) return;
     _signature = sig;
     final byId = _byId;
@@ -135,13 +194,10 @@ class CityMapState extends State<CityMap> with SingleTickerProviderStateMixin {
     // Alcalde: vive en su casa y siempre está afuera paseando.
     if (hogar.isNotEmpty) {
       final home = hogar.first;
-      final d = _door(home);
-      final keep = _mayor;
-      final keepDest = keep?.destId;
-      _mayor = _Walker(keep?.x ?? d.dx, keep?.y ?? d.dy, home.id, 0.35, Color(widget.avatar.skin),
-          Color(widget.avatar.shirt))
+      final start = _entrancePoint(home.id, 1) ?? Offset(home.x * tile + 9.0, home.y * tile + _topPad + 17.0);
+      _mayor = _Walker(start.dx, start.dy, home.id, 0.35, 1, Color(widget.avatar.skin), Color(widget.avatar.shirt))
         ..state = 1
-        ..destId = (keepDest != null && byId.containsKey(keepDest)) ? keepDest : home.id;
+        ..wait = 1;
     } else {
       _mayor = null;
     }
@@ -150,47 +206,35 @@ class CityMapState extends State<CityMap> with SingleTickerProviderStateMixin {
     final count = min(max(0, widget.population - 1), 60);
     final slots = <int>[];
     for (final h in homes) {
+      if (h.type == 'hogar') continue;
       final cap = h.kind.capacity['vivienda']!;
       for (var i = 0; i < cap; i++) {
-        if (h.type != 'hogar') slots.add(h.id);
+        slots.add(h.id);
       }
     }
-    final old = {for (final w in _walkers) w.homeId: w};
     _walkers = [];
     for (var i = 0; i < count && i < slots.length; i++) {
       final home = byId[slots[i]]!;
-      final d = _door(home);
-      final prev = old[home.id];
-      _walkers.add(_Walker(d.dx, d.dy, home.id, 0.18 + _rnd.nextDouble() * 0.2,
+      _walkers.add(_Walker(0, 0, home.id, 0.18 + _rnd.nextDouble() * 0.2, _rnd.nextBool() ? 1 : -1,
           skinColors[_rnd.nextInt(skinColors.length)], clothColors[_rnd.nextInt(clothColors.length)])
-        ..wait = prev == null ? _rnd.nextDouble() * 6 : _rnd.nextDouble() * 3);
+        ..wait = _rnd.nextDouble() * 6);
     }
 
-    // Un camión por cada estación de basura.
-    final stations = widget.buildings.where((b) => b.type == 'basura').toList();
-    final oldTrucks = {for (final t in _trucks) t.stationId: t};
-    _trucks = [
-      for (final s in stations)
-        oldTrucks[s.id] ?? _Truck(s.id, _door(s).dx, _door(s).dy, 3 + _rnd.nextDouble() * 4),
-    ];
-  }
+    // Un camión de basura por estación.
+    _trucks = [];
+    for (final s in widget.buildings.where((b) => b.type == 'basura')) {
+      final p = _entrancePoint(s.id, 0);
+      if (p != null) _trucks.add(_Vehicle(s.id, p.dx, p.dy, 3 + _rnd.nextDouble() * 4));
+    }
 
-  /// Avanza hacia el punto: primero en horizontal y luego en vertical. Regresa true al llegar.
-  bool _stepTo(_Mover who, Offset target, double step) {
-    double x = who.x, y = who.y;
-    if ((x - target.dx).abs() > 0.5) {
-      x += (target.dx - x).sign * min(step, (target.dx - x).abs());
-    } else if ((y - target.dy).abs() > 0.5) {
-      x = target.dx;
-      y += (target.dy - y).sign * min(step, (target.dy - y).abs());
+    // Autobús si hay al menos dos paradas.
+    final stops = widget.buildings.where((b) => b.type == 'parada').toList();
+    if (stops.length >= 2) {
+      final p = _entrancePoint(stops.first.id, 0);
+      _bus = p == null ? null : (_Vehicle(stops.first.id, p.dx, p.dy, 2)..parked = false);
     } else {
-      who.x = target.dx;
-      who.y = target.dy;
-      return true;
+      _bus = null;
     }
-    who.x = x;
-    who.y = y;
-    return false;
   }
 
   int? _randomDestination(int homeId) {
@@ -206,54 +250,49 @@ class CityMapState extends State<CityMap> with SingleTickerProviderStateMixin {
     final dt = min(0.1, now - _last);
     _last = now;
     if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) return;
-    final byId = _byId;
     final night = isNightAt(DateTime.now());
     final frames = dt * 60;
 
     for (final w in _walkers) {
-      final home = byId[w.homeId];
-      if (home == null) continue;
       switch (w.state) {
         case 0: // en casa
           if (night) break;
           w.wait -= dt;
-          if (w.wait <= 0) {
-            w.destId = _randomDestination(w.homeId);
-            if (w.destId != null) {
-              final out = _door(home);
-              w.x = out.dx;
-              w.y = out.dy;
-              w.state = 1;
-            } else {
-              w.wait = 5;
-            }
-          }
-          break;
-        case 1: // yendo
-          final going = byId[w.destId];
-          if (going == null || night) {
-            w.state = 3;
+          if (w.wait > 0) break;
+          final dest = _randomDestination(w.homeId);
+          final route = dest == null ? null : _route(w.homeId, dest, w.side);
+          if (route == null || route.isEmpty) {
+            w.wait = 6;
             break;
           }
-          if (_stepTo(w, _door(going), w.speed * frames)) {
+          w.destId = dest;
+          w.x = route.first.dx;
+          w.y = route.first.dy;
+          w.path = route;
+          w.state = 1;
+          break;
+        case 1: // yendo
+          if (w.advance(w.speed * frames)) {
             w.state = 2;
             w.wait = 4 + _rnd.nextDouble() * 8;
           }
           break;
         case 2: // dentro del destino
           w.wait -= dt;
-          if (w.wait <= 0 || night) {
-            final inside = byId[w.destId];
-            if (inside != null) {
-              final d = _door(inside);
-              w.x = d.dx;
-              w.y = d.dy;
-            }
-            w.state = 3;
+          if (w.wait > 0 && !night) break;
+          final back = w.destId == null ? null : _route(w.destId!, w.homeId, w.side);
+          if (back == null || back.isEmpty) {
+            w.state = 0;
+            w.wait = 5;
+            break;
           }
+          w.x = back.first.dx;
+          w.y = back.first.dy;
+          w.path = back;
+          w.state = 3;
           break;
         case 3: // regresando a casa
-          if (_stepTo(w, _door(home), w.speed * frames)) {
+          if (w.advance(w.speed * (night ? 1.6 : 1) * frames)) {
             w.state = 0;
             w.wait = 3 + _rnd.nextDouble() * 10;
           }
@@ -262,42 +301,62 @@ class CityMapState extends State<CityMap> with SingleTickerProviderStateMixin {
     }
 
     final m = _mayor;
-    if (m != null) {
-      final dest = byId[m.destId];
-      if (dest == null) {
-        m.destId = m.homeId;
-      } else if (_stepTo(m, _door(dest), m.speed * frames)) {
-        m.wait -= dt;
-        if (m.wait <= 0) {
-          m.wait = 2 + _rnd.nextDouble() * 4;
-          m.destId = night ? m.homeId : (_rnd.nextInt(3) == 0 ? m.homeId : (_randomDestination(m.homeId) ?? m.homeId));
+    if (m != null && m.advance(m.speed * frames)) {
+      m.wait -= dt;
+      if (m.wait <= 0) {
+        m.wait = 2 + _rnd.nextDouble() * 4;
+        final from = m.destId ?? m.homeId;
+        final next = night || _rnd.nextInt(3) == 0 ? m.homeId : (_randomDestination(m.homeId) ?? m.homeId);
+        final route = _route(from, next, 1);
+        if (route != null) {
+          m.path = route;
+          m.destId = next;
         }
       }
     }
 
     for (final t in _trucks) {
-      final station = byId[t.stationId];
-      if (station == null) continue;
-      if (t.home) {
+      if (t.parked) {
         t.wait -= dt;
-        if (t.wait <= 0) {
-          final stops = widget.buildings.where((b) => b.id != t.stationId).toList()..shuffle(_rnd);
-          t.route = [for (final b in stops.take(5)) b.id, t.stationId];
-          t.home = false;
+        if (t.wait > 0) continue;
+        // Recorrido: cinco construcciones al azar y de regreso a la estación.
+        final stops = widget.buildings.where((b) => b.id != t.baseId).toList()..shuffle(_rnd);
+        var from = t.baseId;
+        final path = <Offset>[];
+        for (final s in [...stops.take(5).map((b) => b.id), t.baseId]) {
+          final leg = _route(from, s, 0);
+          if (leg == null) continue;
+          path.addAll(leg);
+          from = s;
         }
-        continue;
-      }
-      if (t.route.isEmpty) {
-        t.home = true;
+        if (path.isEmpty) {
+          t.wait = 10;
+          continue;
+        }
+        t.path = path;
+        t.parked = false;
+      } else if (t.advance(0.45 * frames)) {
+        t.parked = true;
         t.wait = 8 + _rnd.nextDouble() * 10;
-        continue;
       }
-      final target = byId[t.route.first];
-      if (target == null) {
-        t.route.removeAt(0);
-        continue;
+    }
+
+    final bus = _bus;
+    if (bus != null) {
+      final stops = widget.buildings.where((b) => b.type == 'parada').toList();
+      if (bus.path.isEmpty) {
+        bus.wait -= dt;
+        if (bus.wait <= 0 && stops.length >= 2) {
+          final from = stops[bus.stopIndex % stops.length].id;
+          bus.stopIndex = (bus.stopIndex + 1) % stops.length;
+          final to = stops[bus.stopIndex].id;
+          final leg = _route(from, to, 0);
+          if (leg != null) bus.path = leg;
+          bus.wait = 1.5;
+        }
+      } else {
+        bus.advance(0.4 * frames);
       }
-      if (_stepTo(t, _door(target), 0.5 * frames)) t.route.removeAt(0);
     }
   }
 
@@ -354,10 +413,7 @@ class CityMapState extends State<CityMap> with SingleTickerProviderStateMixin {
       onTapUp: widget.interactive ? _onTap : null,
       child: CustomPaint(
         size: Size(_mapW * _px, _mapH * _px),
-        painter: _CityPainter(
-          state: this,
-          repaint: _ticker,
-        ),
+        painter: _CityPainter(state: this, repaint: _ticker),
       ),
     );
     return LayoutBuilder(builder: (context, c) {
@@ -388,6 +444,9 @@ class _CityPainter extends CustomPainter {
   static const _grass = Color(0xFF3F6A35);
   static const _grassAlt = Color(0xFF43703A);
   static const _tuft = Color(0xFF4F7F40);
+  static const _asphalt = Color(0xFF4A4552);
+  static const _curb = Color(0xFFB9B2A6);
+  static const _lane = Color(0xFFE8D27A);
   static const _ink = Color(0xFF0F0B14);
   static const _gold = Color(0xFFF4B942);
 
@@ -406,6 +465,29 @@ class _CityPainter extends CustomPainter {
         if ((x + y).isOdd) p.r(_grassAlt, ox, oy, tile, tile);
         final h = (x * 31 + y * 17) % 7;
         if (h < 3) p.r(_tuft, ox + 3 + h * 4, oy + 5 + h * 3, 1, 2);
+      }
+    }
+
+    // Calles con banqueta y líneas
+    final net = state.net;
+    for (final k in net.roads) {
+      final x = net.xOf(k), y = net.yOf(k);
+      final ox = x * tile, oy = y * tile + _topPad;
+      final up = net.isRoad(x, y - 1), down = net.isRoad(x, y + 1);
+      final left = net.isRoad(x - 1, y), right = net.isRoad(x + 1, y);
+      p.r(_asphalt, ox, oy, tile, tile);
+      if (!up) p.r(_curb, ox, oy, tile, 3);
+      if (!down) p.r(_curb, ox, oy + tile - 3, tile, 3);
+      if (!left) p.r(_curb, ox, oy, 3, tile);
+      if (!right) p.r(_curb, ox + tile - 3, oy, 3, tile);
+      final horizontal = (left || right) && !up && !down;
+      final vertical = (up || down) && !left && !right;
+      if (horizontal) {
+        p.r(_lane, ox + 2, oy + 8, 5, 1);
+        p.r(_lane, ox + 11, oy + 8, 5, 1);
+      } else if (vertical) {
+        p.r(_lane, ox + 8, oy + 2, 1, 5);
+        p.r(_lane, ox + 8, oy + 11, 1, 5);
       }
     }
 
@@ -447,15 +529,17 @@ class _CityPainter extends CustomPainter {
       }
     }
 
-    // Vecinos, camiones y alcalde
+    // Vehículos, vecinos y alcalde
+    final byId = state._byId;
+    for (final t in state._trucks) {
+      if (t.parked) continue;
+      _vehicle(p, t.x, t.y, Color(byId[t.baseId]?.color ?? 0xFF5F9C6A), bus: false);
+    }
+    final bus = state._bus;
+    if (bus != null) _vehicle(p, bus.x, bus.y, Color(byId[bus.baseId]?.color ?? 0xFFF4B942), bus: true);
     for (final wk in state._walkers) {
       if (wk.state == 0 || wk.state == 2) continue;
       _person(p, wk.x, wk.y, wk.skin, wk.shirt);
-    }
-    for (final t in state._trucks) {
-      if (t.home) continue;
-      final station = state._byId[t.stationId];
-      _truck(p, t.x, t.y, Color(station?.color ?? 0xFF5F9C6A));
     }
     final m = state._mayor;
     if (m != null) _mayorSprite(p, m.x, m.y, w.avatar);
@@ -498,14 +582,24 @@ class _CityPainter extends CustomPainter {
     p.r(_gold, x + 1, y - 2, 2, 1);
   }
 
-  void _truck(Px p, double fx, double fy, Color c) {
-    final x = fx.roundToDouble() - 4, y = fy.roundToDouble() - 5;
-    p.r(c, x, y, 5, 4);
-    p.r(Color.lerp(c, Colors.black, 0.3)!, x + 1, y + 1, 3, 1);
-    p.r(c, x + 5, y + 1, 3, 3);
-    p.r(glassColor, x + 6, y + 1, 1, 1);
-    p.r(_ink, x + 1, y + 4, 2, 1);
-    p.r(_ink, x + 5, y + 4, 2, 1);
+  void _vehicle(Px p, double fx, double fy, Color c, {required bool bus}) {
+    final len = bus ? 10 : 8;
+    final x = fx.roundToDouble() - len / 2, y = fy.roundToDouble() - 3;
+    final dark = Color.lerp(c, Colors.black, 0.3)!;
+    if (bus) {
+      p.r(c, x, y, len, 5);
+      for (var i = 1; i < len - 1; i += 2) {
+        p.r(glassColor, x + i, y + 1, 1, 2);
+      }
+      p.r(dark, x, y + 4, len, 1);
+    } else {
+      p.r(c, x, y, 5, 4);
+      p.r(dark, x + 1, y + 1, 3, 1);
+      p.r(c, x + 5, y + 1, 3, 3);
+      p.r(glassColor, x + 6, y + 1, 1, 1);
+    }
+    p.r(_ink, x + 1, y + 5, 2, 1);
+    p.r(_ink, x + len - 3, y + 5, 2, 1);
   }
 
   @override

@@ -20,7 +20,11 @@ const List<Color> clothColors = [
 const List<String> hairStyles = [
   'corto', 'flequillo', 'raya', 'picos', 'rizado', 'afro', 'mohicano', 'largo', 'coleta', 'trenzas', 'chongo', 'calvo',
 ];
-const List<String> accessories = ['ninguno', 'lentes', 'gorra'];
+/// Accesorios: los tres primeros son gratis; el resto se gana con logros.
+const List<String> accessories = [
+  'ninguno', 'lentes', 'gorra',
+  'audifonos', 'bufanda', 'lentes_sol', 'flor', 'mono', 'diadema', 'sombrero', 'capa', 'corona', 'banda',
+];
 
 /// Dibuja rectángulos en una cuadrícula de píxeles lógicos.
 class Px {
@@ -143,14 +147,82 @@ void drawAvatar(Canvas canvas, Avatar a, double ox, double oy, double s) {
     default:
       base();
   }
-  if (a.accessory == 'lentes') {
-    p.r(_ink, 5, 5, 6, 1);
-    p.r(const Color(0xFF9FD8FF), 6, 5);
-    p.r(const Color(0xFF9FD8FF), 9, 5);
-  } else if (a.accessory == 'gorra') {
-    p.r(const Color(0xFFD24C4C), 4, 1, 8, 3);
-    p.r(const Color(0xFFA83A3A), 8, 3, 5, 1);
-    p.r(const Color(0xFFEFE6D6), 7, 2, 2, 1);
+  const red = Color(0xFFD24C4C);
+  const gold = Color(0xFFF4B942);
+  const white = Color(0xFFF3EEE4);
+  switch (a.accessory) {
+    case 'lentes':
+      p.r(_ink, 5, 5, 6, 1);
+      p.r(const Color(0xFF9FD8FF), 6, 5);
+      p.r(const Color(0xFF9FD8FF), 9, 5);
+      break;
+    case 'gorra':
+      p.r(red, 4, 1, 8, 3);
+      p.r(const Color(0xFFA83A3A), 8, 3, 5, 1);
+      p.r(const Color(0xFFEFE6D6), 7, 2, 2, 1);
+      break;
+    case 'audifonos':
+      p.r(const Color(0xFF2F2F3A), 4, 1, 8, 1);
+      p.r(const Color(0xFF2F2F3A), 4, 2, 1, 2);
+      p.r(const Color(0xFF2F2F3A), 11, 2, 1, 2);
+      p.r(red, 3, 4, 2, 3);
+      p.r(red, 11, 4, 2, 3);
+      break;
+    case 'bufanda':
+      p.r(red, 4, 9, 8, 2);
+      p.r(red, 9, 11, 2, 3);
+      p.r(white, 5, 9);
+      p.r(white, 8, 10);
+      p.r(white, 9, 12);
+      break;
+    case 'lentes_sol':
+      p.r(_ink, 5, 5, 2, 2);
+      p.r(_ink, 9, 5, 2, 2);
+      p.r(_ink, 7, 5, 2, 1);
+      p.r(white, 5, 5);
+      p.r(white, 9, 5);
+      break;
+    case 'flor':
+      p.r(const Color(0xFFFF8FB0), 10, 1, 3, 3);
+      p.r(gold, 11, 2);
+      break;
+    case 'mono':
+      p.r(const Color(0xFFE3655B), 9, 1, 2, 2);
+      p.r(const Color(0xFFE3655B), 12, 1, 2, 2);
+      p.r(const Color(0xFFA83A3A), 11, 1, 1, 2);
+      break;
+    case 'diadema':
+      p.r(const Color(0xFFC27CE0), 4, 3, 8, 1);
+      p.r(gold, 7, 2, 2, 1);
+      break;
+    case 'sombrero':
+      const tan = Color(0xFFC9A86A);
+      p.r(tan, 2, 3, 12, 1);
+      p.r(tan, 5, 0, 6, 3);
+      p.r(const Color(0xFF6B3F2A), 5, 2, 6, 1);
+      p.r(gold, 2, 3);
+      p.r(gold, 13, 3);
+      break;
+    case 'capa':
+      p.r(red, 2, 9, 1, 6);
+      p.r(red, 13, 9, 1, 6);
+      p.r(red, 4, 9, 8, 1);
+      p.r(gold, 7, 9, 2, 1);
+      break;
+    case 'corona':
+      p.r(gold, 5, 1, 6, 2);
+      p.r(gold, 5, 0);
+      p.r(gold, 8, 0);
+      p.r(gold, 10, 0);
+      p.r(red, 7, 1, 2, 1);
+      break;
+    case 'banda':
+      for (var i = 0; i < 4; i++) {
+        p.r(const Color(0xFF3E8C56), 4 + i * 2, 9 + i);
+        p.r(white, 5 + i * 2, 9 + i);
+        p.r(red, 6 + i * 2, 9 + i);
+      }
+      break;
   }
 }
 

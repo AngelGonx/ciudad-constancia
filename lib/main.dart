@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'game/achievements.dart';
 import 'game/game_state.dart';
 import 'game/rules.dart';
 import 'i18n/strings.dart';
+import 'screens/achievements_screen.dart';
 import 'screens/avatar_screen.dart';
 import 'screens/city_screen.dart';
 import 'screens/missions_screen.dart';
 import 'screens/progress_screen.dart';
 import 'screens/settings_screen.dart';
+import 'services/reminders.dart';
+import 'services/store.dart';
 import 'ui/pixel.dart';
 import 'ui/sprites.dart';
 
@@ -16,7 +20,12 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final game = GameState();
   await game.load();
+  await Reminders.init();
+  game.onChanged = Reminders.scheduleSoon;
+  Reminders.scheduleSoon(game);
   runApp(PixelTodoApp(game: game));
+  // La tienda se prepara después de mostrar la app para no retrasar el arranque.
+  Store.instance.init(game);
 }
 
 class PixelTodoApp extends StatelessWidget {
@@ -59,7 +68,26 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _tab = 0;
-  static const _tabs = ['tab.missions', 'tab.city', 'tab.progress', 'tab.avatar'];
+  static const _tabs = ['tab.missions', 'tab.city', 'tab.achievements', 'tab.progress', 'tab.avatar'];
+  bool _showingAchievement = false;
+
+  /// Muestra, uno por uno, los logros recién ganados.
+  void _showPendingAchievements() {
+    final g = widget.game;
+    if (_showingAchievement || g.pendingAchievements.isEmpty) return;
+    final id = g.pendingAchievements.removeAt(0);
+    final a = achievements.firstWhere((x) => x.id == id);
+    _showingAchievement = true;
+    final lines = [
+      achievementGoalText(a),
+      L.f('ach.unlockedGold', {'n': fmt(a.gold)}),
+      if (a.cosmetic != null) L.f('ach.unlockedCosmetic', {'name': L.t('acc.${a.cosmetic}')}),
+    ];
+    showPixelDialog(context, '${L.t('ach.unlockedTitle')}\n${L.t('ach.$id')}', lines.join('\n')).then((_) {
+      _showingAchievement = false;
+      if (mounted) _showPendingAchievements();
+    });
+  }
 
   void _openSettings() {
     FocusManager.instance.primaryFocus?.unfocus();
@@ -72,9 +100,15 @@ class _HomeShellState extends State<HomeShell> {
     final pages = <Widget>[
       MissionsScreen(game: g),
       CityScreen(game: g),
+      AchievementsScreen(game: g),
       ProgressScreen(game: g),
       AvatarScreen(game: g),
     ];
+    if (g.pendingAchievements.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showPendingAchievements();
+      });
+    }
     return Scaffold(
       backgroundColor: C.bg,
       body: SafeArea(
@@ -99,12 +133,12 @@ class _HomeShellState extends State<HomeShell> {
         child: SafeArea(
           top: false,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             child: Row(children: [
               for (var i = 0; i < _tabs.length; i++)
                 Expanded(
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
                     child: _TabButton(
                       label: L.t(_tabs[i]),
                       selected: i == _tab,

@@ -167,6 +167,10 @@ const List<BuildingType> catalog = [
   BuildingType(id: 'cancha', category: 'felicidad', cost: 450, level: 4, capacity: {'felicidad': 6}, art: 'court', base: 0xFFD9805B),
   BuildingType(id: 'kiosko', category: 'felicidad', cost: 600, level: 5, capacity: {'felicidad': 8}, art: 'kiosk', base: 0xFF3E8C56),
 
+  // Transporte
+  BuildingType(id: 'parada', category: 'transporte', cost: 150, level: 2, capacity: {'felicidad': 2},
+      art: 'busstop', base: 0xFFF4B942),
+
   // Gobierno
   BuildingType(id: 'palacio', category: 'gobierno', cost: 3000, level: 10, capacity: {}, art: 'palace', base: 0xFFEFE6D6, unique: true),
 ];

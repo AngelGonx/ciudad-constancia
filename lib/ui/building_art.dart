@@ -126,6 +126,9 @@ List<Rect> drawBuildingArt(Px base, BuildingType type, Color main, double x, dou
     case 'palace':
       _palace(a);
       break;
+    case 'busstop':
+      _busStop(a);
+      break;
   }
   return windows;
 }
@@ -533,6 +536,21 @@ void _kiosk(_Art a) {
   a.r(a.base, 3, 5, 12, 2);
   a.r(a.base, 6, 3, 6, 2);
   a.r(_gold, 8, 1, 2, 2);
+}
+
+// ---------------- Transporte ----------------
+
+void _busStop(_Art a) {
+  a.r(const Color(0xFFB9B2A6), 1, 15, 16, 3);
+  a.r(a.base, 3, 6, 12, 2);
+  a.r(shade(a.base, 0.3), 3, 8, 12, 1);
+  a.r(_gray, 3, 8, 1, 8);
+  a.r(_gray, 14, 8, 1, 8);
+  a.win(5, 9, 8, 3);
+  a.r(const Color(0xFF8A5A3A), 5, 13, 8, 1);
+  a.r(_gray, 16, 3, 1, 13);
+  a.r(_white, 15, 1, 3, 3);
+  a.r(const Color(0xFF3D78A8), 16, 2);
 }
 
 // ---------------- Gobierno ----------------
