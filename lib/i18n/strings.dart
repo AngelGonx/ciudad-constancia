@@ -349,6 +349,7 @@ const Map<String, String> _es = {
   's.dailyAt': 'Aviso diario a las {t}',
   's.change': 'Cambiar hora',
   's.test': 'Probar aviso',
+  's.xiaomiTip': 'En Xiaomi, Redmi o POCO: activa "Inicio automático" para Pixel To-Do y no la cierres deslizándola desde recientes, o los avisos no llegarán con la app cerrada.',
   's.exact': 'Avisos a la hora exacta',
   's.exactText': 'Tus avisos pueden llegar con unos minutos de margen. Si los quieres al minuto, permite la hora exacta (opcional).',
 
@@ -679,6 +680,7 @@ const Map<String, String> _en = {
   's.dailyAt': 'Daily alert at {t}',
   's.change': 'Change time',
   's.test': 'Test alert',
+  's.xiaomiTip': 'On Xiaomi, Redmi or POCO: turn on "Autostart" for Pixel To-Do and don\'t swipe it away from recent apps, or alerts won\'t arrive while the app is closed.',
   's.exact': 'Exact-time alerts',
   's.exactText': 'Your alerts may arrive a few minutes late. If you want them right on time, allow exact timing (optional).',
 

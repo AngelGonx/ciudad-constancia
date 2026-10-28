@@ -102,6 +102,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                         PixelButton(label: L.t('s.test'), onPressed: Reminders.showTest),
                       ]),
+                      const SizedBox(height: 12),
+                      Text(L.t('s.xiaomiTip'), style: T.body(13, C.dim)),
                       FutureBuilder<bool>(
                         future: Reminders.canBeExact(),
                         builder: (context, snap) {
