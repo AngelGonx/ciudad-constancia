@@ -27,8 +27,14 @@ class Task {
   int earnedGold;
   int earnedPeople;
 
-  /// Minutos desde medianoche para el recordatorio, o null si no tiene.
+  /// Hábitos: minutos desde medianoche para el recordatorio diario, o null.
   int? reminder;
+
+  /// Misiones únicas: fecha límite (milisegundos desde 1970), o null.
+  int? due;
+
+  DateTime? get dueDate => due == null ? null : DateTime.fromMillisecondsSinceEpoch(due!);
+  bool get overdue => !isHabit && done == null && due != null && DateTime.now().millisecondsSinceEpoch > due!;
 
   Task({
     required this.id,
@@ -44,6 +50,7 @@ class Task {
     this.earnedGold = 0,
     this.earnedPeople = 0,
     this.reminder,
+    this.due,
   });
 
   bool get isHabit => kind == 'habito';
@@ -55,7 +62,7 @@ class Task {
   Map<String, dynamic> toJson() => {
         'id': id, 'title': title, 'kind': kind, 'diff': diff, 'streak': streak,
         'last': last, 'done': done, 'prevLast': prevLast, 'prevStreak': prevStreak,
-        'earnedXp': earnedXp, 'earnedGold': earnedGold, 'earnedPeople': earnedPeople, 'reminder': reminder,
+        'earnedXp': earnedXp, 'earnedGold': earnedGold, 'earnedPeople': earnedPeople, 'reminder': reminder, 'due': due,
       };
 
   factory Task.fromJson(Map<String, dynamic> j) => Task(
@@ -72,6 +79,7 @@ class Task {
         earnedGold: (j['earnedGold'] as num?)?.toInt() ?? 0,
         earnedPeople: (j['earnedPeople'] as num?)?.toInt() ?? 0,
         reminder: (j['reminder'] as num?)?.toInt(),
+        due: (j['due'] as num?)?.toInt(),
       );
 }
 
@@ -313,6 +321,15 @@ class GameState extends ChangeNotifier {
     tasks = ((j['tasks'] as List?) ?? [])
         .map((e) => Task.fromJson((e as Map).cast<String, dynamic>()))
         .toList();
+    // Antes las misiones únicas también tenían solo hora; se vuelve fecha límite de hoy.
+    for (final t in tasks) {
+      final m = t.reminder;
+      if (!t.isHabit && m != null) {
+        final n = DateTime.now();
+        t.due ??= DateTime(n.year, n.month, n.day, m ~/ 60, m % 60).millisecondsSinceEpoch;
+        t.reminder = null;
+      }
+    }
     history = ((j['history'] as Map?) ?? {}).map(
         (k, v) => MapEntry(k as String, DayStat.fromJson((v as Map).cast<String, dynamic>())));
   }
@@ -525,10 +542,26 @@ class GameState extends ChangeNotifier {
     _commit();
   }
 
+  void setTaskDue(Task t, DateTime? due) {
+    t.due = due?.millisecondsSinceEpoch;
+    _commit();
+  }
+
   // ---------- acciones ----------
 
-  void addTask(String title, String kind, String diff, {int? reminder}) {
-    tasks.insert(0, Task(id: _newId(), title: title, kind: kind, diff: diff, reminder: reminder));
+  void addTask(String title, String kind, String diff, {int? reminder, DateTime? due}) {
+    final isHabit = kind == 'habito';
+    tasks.insert(
+      0,
+      Task(
+        id: _newId(),
+        title: title,
+        kind: kind,
+        diff: diff,
+        reminder: isHabit ? reminder : null,
+        due: isHabit ? null : due?.millisecondsSinceEpoch,
+      ),
+    );
     _commit();
   }
 

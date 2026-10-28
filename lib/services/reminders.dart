@@ -14,6 +14,7 @@ import '../i18n/strings.dart';
 class Reminders {
   static final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
   static bool _ready = false;
+  static bool _exact = false;
   static Timer? _debounce;
 
   static const int _dailyId = 1;
@@ -31,15 +32,29 @@ class Reminders {
     }
   }
 
-  /// Pide permiso de notificaciones (Android 13+). Regresa false si se negó.
+  static AndroidFlutterLocalNotificationsPlugin? get _android =>
+      _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+
+  /// Pide permiso de notificaciones (Android 13+) y de alarmas exactas para que
+  /// los avisos lleguen a la hora justa. Regresa false si se negaron las notificaciones.
   static Future<bool> requestPermission() async {
     if (!_ready) return false;
     try {
-      final android = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
-      return await android?.requestNotificationsPermission() ?? true;
+      final ok = await _android?.requestNotificationsPermission() ?? true;
+      final exact = await _android?.canScheduleExactNotifications() ?? true;
+      if (!exact) await _android?.requestExactAlarmsPermission();
+      return ok;
     } catch (_) {
       return false;
     }
+  }
+
+  /// Activa los recordatorios (pidiendo permiso) si todavía estaban apagados.
+  static Future<bool> ensureEnabled(GameState g) async {
+    if (g.remindersOn) return true;
+    final ok = await requestPermission();
+    g.setReminders(true);
+    return ok;
   }
 
   static NotificationDetails _details(String title, String body, {bool banner = false}) {
@@ -100,20 +115,25 @@ class Reminders {
       id: id,
       scheduledDate: tz.TZDateTime.from(when, tz.UTC),
       notificationDetails: _details(title, body, banner: banner),
-      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      androidScheduleMode: _exact ? AndroidScheduleMode.exactAllowWhileIdle : AndroidScheduleMode.inexactAllowWhileIdle,
       title: title,
       body: body,
       matchDateTimeComponents: daily ? DateTimeComponents.time : null,
     );
   }
 
-  static int _taskId(Task t) => 1000 + (t.id.hashCode & 0x0FFFFFFF);
+  static int _taskId(Task t) => 1000 + (t.id.hashCode & 0x03FFFFFF) * 2;
 
   static Future<void> reschedule(GameState g) async {
     if (!_ready) return;
     try {
       await _plugin.cancelAll();
       if (!g.remindersOn) return;
+      try {
+        _exact = await _android?.canScheduleExactNotifications() ?? false;
+      } catch (_) {
+        _exact = false;
+      }
 
       final pending = g.tasks.where((t) => !t.doneToday && (t.isHabit || t.done == null)).length;
       await _at(
@@ -127,15 +147,29 @@ class Reminders {
 
       for (final t in g.tasks) {
         final m = t.reminder;
-        if (m == null) continue;
+        if (m == null || !t.isHabit) continue;
         final d = difficulties[t.diff]!;
         final body = L.f('r.taskBody', {'xp': d.xp, 'gold': d.gold});
         if (t.isHabit) {
           // Si ya se cumplió hoy, el primer aviso es mañana.
           await _at(_taskId(t), _next(m, skipToday: t.doneToday), L.f('r.habitTitle', {'t': t.title}), body,
               daily: true);
-        } else if (t.done == null) {
-          await _at(_taskId(t), _next(m), L.f('r.missionTitle', {'t': t.title}), body);
+        }
+      }
+
+      // Misiones únicas con fecha límite: aviso una hora antes y al vencer.
+      final now = DateTime.now();
+      for (final t in g.tasks) {
+        final due = t.dueDate;
+        if (t.isHabit || t.done != null || due == null) continue;
+        final d = difficulties[t.diff]!;
+        final body = L.f('r.taskBody', {'xp': d.xp, 'gold': d.gold});
+        final before = due.subtract(const Duration(hours: 1));
+        if (before.isAfter(now)) {
+          await _at(_taskId(t), before, L.f('r.dueSoon', {'t': t.title}), body);
+        }
+        if (due.isAfter(now)) {
+          await _at(_taskId(t) + 1, due, L.f('r.dueNow', {'t': t.title}), body);
         }
       }
     } catch (_) {

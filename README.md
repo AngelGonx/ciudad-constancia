@@ -1,6 +1,6 @@
 # Pixel To-Do
 
-App Android de pendientes y hábitos con estética pixel. Cada misión cumplida da XP y oro, y con el oro construyes **Ciudad Constancia**: empiezas en una casita y creces hasta levantar el palacio municipal.
+App Android de pendientes y hábitos con estética pixel. Cada misión cumplida da XP y oro, y con el oro construyes **Ciudad Pixel**: empiezas en una casita y creces hasta levantar el palacio municipal.
 
 ## Cómo funciona
 

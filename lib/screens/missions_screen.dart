@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../game/game_state.dart';
 import '../game/rules.dart';
 import '../i18n/strings.dart';
+import '../services/reminders.dart';
 import '../ui/pixel.dart';
 import '../ui/time_picker.dart';
 
@@ -19,7 +20,8 @@ class _MissionsScreenState extends State<MissionsScreen> {
   final _titleFocus = FocusNode();
   String _kind = 'habito';
   String _diff = 'media';
-  int? _reminder;
+  int? _reminder; // hábitos
+  DateTime? _due; // misiones únicas
 
   @override
   void dispose() {
@@ -33,18 +35,39 @@ class _MissionsScreenState extends State<MissionsScreen> {
   void _add() {
     final text = _title.text.trim();
     if (text.isEmpty) return;
-    widget.game.addTask(text, _kind, _diff, reminder: _reminder);
-    if (_reminder != null && !widget.game.remindersOn) showToast(context, L.t('r.needOn'));
+    final habit = _kind == 'habito';
+    final wantsAlert = habit ? _reminder != null : _due != null;
+    widget.game.addTask(text, _kind, _diff, reminder: _reminder, due: _due);
     _title.clear();
-    setState(() => _reminder = null);
+    setState(() {
+      _reminder = null;
+      _due = null;
+    });
     _hideKeyboard();
+    if (wantsAlert) _turnOnAlerts();
   }
 
-  Future<void> _editReminder(Task t) async {
-    final choice = await pickTime(context, t.reminder ?? 9 * 60, allowRemove: t.reminder != null);
-    if (choice == null || !mounted) return;
-    widget.game.setTaskReminder(t, choice.removed ? null : choice.minutes);
-    if (!choice.removed && !widget.game.remindersOn) showToast(context, L.t('r.needOn'));
+  /// Al poner un recordatorio o fecha límite se activan los avisos y se pide permiso.
+  Future<void> _turnOnAlerts() async {
+    final g = widget.game;
+    if (g.remindersOn) return;
+    final ok = await Reminders.ensureEnabled(g);
+    if (!mounted) return;
+    showToast(context, ok ? L.t('r.enabled') : L.t('r.denied'));
+  }
+
+  Future<void> _editAlert(Task t) async {
+    if (t.isHabit) {
+      final choice = await pickTime(context, t.reminder ?? 9 * 60, allowRemove: t.reminder != null);
+      if (choice == null || !mounted) return;
+      widget.game.setTaskReminder(t, choice.removed ? null : choice.minutes);
+      if (!choice.removed) _turnOnAlerts();
+    } else {
+      final choice = await pickDateTime(context, t.dueDate ?? _defaultDue(), allowRemove: t.due != null);
+      if (choice == null || !mounted) return;
+      widget.game.setTaskDue(t, choice.removed ? null : choice.date);
+      if (!choice.removed) _turnOnAlerts();
+    }
   }
 
   void _toggle(Task t) {
@@ -87,7 +110,7 @@ class _MissionsScreenState extends State<MissionsScreen> {
           task: t,
           onToggle: () => _toggle(t),
           onDelete: () => g.deleteTask(t),
-          onReminder: () => _editReminder(t),
+          onReminder: () => _editAlert(t),
         );
 
     return GestureDetector(
@@ -132,9 +155,11 @@ class _MissionsScreenState extends State<MissionsScreen> {
             kind: _kind,
             diff: _diff,
             reminder: _reminder,
+            due: _due,
             onKind: (v) => setState(() => _kind = v),
             onDiff: (v) => setState(() => _diff = v),
             onReminder: (v) => setState(() => _reminder = v),
+            onDue: (v) => setState(() => _due = v),
             onSubmit: _add,
           ),
           const SizedBox(height: 20),
@@ -182,9 +207,11 @@ class _AddForm extends StatelessWidget {
   final String kind;
   final String diff;
   final int? reminder;
+  final DateTime? due;
   final ValueChanged<String> onKind;
   final ValueChanged<String> onDiff;
   final ValueChanged<int?> onReminder;
+  final ValueChanged<DateTime?> onDue;
   final VoidCallback onSubmit;
   const _AddForm({
     required this.controller,
@@ -192,9 +219,11 @@ class _AddForm extends StatelessWidget {
     required this.kind,
     required this.diff,
     required this.reminder,
+    required this.due,
     required this.onKind,
     required this.onDiff,
     required this.onReminder,
+    required this.onDue,
     required this.onSubmit,
   });
 
@@ -232,19 +261,35 @@ class _AddForm extends StatelessWidget {
               PixelChoice(label: e.name, selected: diff == e.id, onTap: () => onDiff(e.id)),
           ]),
           const SizedBox(height: 12),
-          Text(L.t('r.reminder'), style: T.body(13, C.dim)),
-          const SizedBox(height: 6),
-          Wrap(spacing: 8, runSpacing: 8, children: [
-            PixelChoice(label: L.t('r.none'), selected: reminder == null, onTap: () => onReminder(null)),
-            PixelChoice(
-              label: reminder == null ? '+ ${L.t('r.hour')}' : formatMinutes(reminder!),
-              selected: reminder != null,
-              onTap: () async {
-                final choice = await pickTime(context, reminder ?? 9 * 60);
-                if (choice != null && !choice.removed) onReminder(choice.minutes);
-              },
-            ),
-          ]),
+          if (kind == 'habito') ...[
+            Text(L.t('r.reminder'), style: T.body(13, C.dim)),
+            const SizedBox(height: 6),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              PixelChoice(label: L.t('r.none'), selected: reminder == null, onTap: () => onReminder(null)),
+              PixelChoice(
+                label: reminder == null ? '+ ${L.t('r.hour')}' : formatMinutes(reminder!),
+                selected: reminder != null,
+                onTap: () async {
+                  final choice = await pickTime(context, reminder ?? 9 * 60);
+                  if (choice != null && !choice.removed) onReminder(choice.minutes);
+                },
+              ),
+            ]),
+          ] else ...[
+            Text(L.t('r.due'), style: T.body(13, C.dim)),
+            const SizedBox(height: 6),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              PixelChoice(label: L.t('r.noDue'), selected: due == null, onTap: () => onDue(null)),
+              PixelChoice(
+                label: due == null ? '+ ${L.t('r.due')}' : formatDue(due!),
+                selected: due != null,
+                onTap: () async {
+                  final choice = await pickDateTime(context, due ?? _defaultDue());
+                  if (choice != null && !choice.removed) onDue(choice.date);
+                },
+              ),
+            ]),
+          ],
           const SizedBox(height: 14),
           Row(children: [
             Expanded(child: Text(L.f('m.reward', {'xp': d.xp, 'gold': d.gold}), style: T.body(13, C.dim))),
@@ -307,26 +352,7 @@ class _TaskRow extends StatelessWidget {
                   PixelChip(d.name, color: C.forDifficulty(d.id)),
                   Text(L.f('m.gain', {'xp': d.xp, 'gold': d.gold}), style: T.body(12, C.dim)),
                   if (streak > 0) PixelChip(L.f('m.streak', {'n': streak}), color: C.bad, textColor: C.fg),
-                  Semantics(
-                    button: true,
-                    label: L.t('r.reminder'),
-                    child: GestureDetector(
-                      onTap: onReminder,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: task.reminder != null ? C.gold : C.panel, width: 2),
-                        ),
-                        child: Row(mainAxisSize: MainAxisSize.min, children: [
-                          PixelBell(size: 10, color: task.reminder != null ? C.gold : C.dim),
-                          if (task.reminder != null) ...[
-                            const SizedBox(width: 4),
-                            Text(formatMinutes(task.reminder!), style: T.display(10, C.gold)),
-                          ],
-                        ]),
-                      ),
-                    ),
-                  ),
+                  _AlertChip(task: task, onTap: onReminder),
                 ]),
               ]),
             ),
@@ -360,6 +386,49 @@ class _Empty extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(border: Border.all(color: C.panel2, width: 3)),
       child: Text(text, textAlign: TextAlign.center, style: T.body(14, C.dim)),
+    );
+  }
+}
+
+/// Por defecto, la fecha límite es mañana a las 6:00 p. m.
+DateTime _defaultDue() {
+  final n = DateTime.now();
+  return DateTime(n.year, n.month, n.day + 1, 18);
+}
+
+/// Campanita (hábitos) o calendario (misiones) con la hora o fecha límite.
+class _AlertChip extends StatelessWidget {
+  final Task task;
+  final VoidCallback onTap;
+  const _AlertChip({required this.task, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final habit = task.isHabit;
+    final due = task.dueDate;
+    final hasAlert = habit ? task.reminder != null : due != null;
+    final isLate = task.overdue;
+    final color = !hasAlert ? C.dim : (isLate ? C.bad : C.gold);
+    final label = habit
+        ? (task.reminder == null ? null : formatMinutes(task.reminder!))
+        : (due == null ? null : L.f(isLate ? 'm.overdue' : 'm.due', {'d': formatDue(due)}));
+    return Semantics(
+      button: true,
+      label: L.t(habit ? 'r.reminder' : 'r.due'),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          decoration: BoxDecoration(border: Border.all(color: hasAlert ? color : C.panel, width: 2)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            if (habit) PixelBell(size: 10, color: color) else PixelCalendar(size: 10, color: color),
+            if (label != null) ...[
+              const SizedBox(width: 4),
+              Flexible(child: Text(label, style: T.display(10, color))),
+            ],
+          ]),
+        ),
+      ),
     );
   }
 }

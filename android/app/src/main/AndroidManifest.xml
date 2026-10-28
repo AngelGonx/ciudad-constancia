@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Recordatorios: reprogramarlos al reiniciar el teléfono -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <!-- Para que los recordatorios lleguen a la hora exacta (el usuario lo autoriza en Ajustes del teléfono) -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <application
         android:label="Pixel To-Do"
         android:name="${applicationName}"

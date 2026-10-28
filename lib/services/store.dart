@@ -9,7 +9,7 @@ import '../game/game_state.dart';
 /// [productId] y precio de 1 USD. Las compras solo funcionan cuando la app se
 /// instala desde Google Play (por ejemplo, desde una prueba interna).
 class Store extends ChangeNotifier {
-  static const String productId = 'ciudad_constancia';
+  static const String productId = 'ciudad_pixel';
   static final Store instance = Store._();
   Store._();
 
