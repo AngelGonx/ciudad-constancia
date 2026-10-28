@@ -160,8 +160,8 @@ class _CityPainter extends CustomPainter {
     for (final w in walkers) {
       final x = w.x.roundToDouble();
       final y = _top + w.row * _band + 18 + w.lane;
-      final skin = w.isMayor ? skinColors[avatar.skin.clamp(0, skinColors.length - 1).toInt()] : w.skin;
-      final shirt = w.isMayor ? clothColors[avatar.shirt.clamp(0, clothColors.length - 1).toInt()] : w.shirt;
+      final skin = w.isMayor ? Color(avatar.skin) : w.skin;
+      final shirt = w.isMayor ? Color(avatar.shirt) : w.shirt;
       p.r(skin, x, y, 2, 2);
       p.r(shirt, x, y + 2, 2, 2);
       final step = (w.x / 2).floor() % 2 == 1 ? 1 : 0;

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../game/game_state.dart';
 import '../game/rules.dart';
+import '../i18n/strings.dart';
 import '../ui/pixel.dart';
 
 class MissionsScreen extends StatefulWidget {
@@ -14,24 +15,30 @@ class MissionsScreen extends StatefulWidget {
 
 class _MissionsScreenState extends State<MissionsScreen> {
   final _title = TextEditingController();
+  final _titleFocus = FocusNode();
   String _kind = 'habito';
   String _diff = 'media';
 
   @override
   void dispose() {
     _title.dispose();
+    _titleFocus.dispose();
     super.dispose();
   }
+
+  void _hideKeyboard() => FocusManager.instance.primaryFocus?.unfocus();
 
   void _add() {
     final text = _title.text.trim();
     if (text.isEmpty) return;
     widget.game.addTask(text, _kind, _diff);
     _title.clear();
-    FocusScope.of(context).unfocus();
+    _hideKeyboard();
   }
 
   void _toggle(Task t) {
+    // Al marcar una tarea nunca debe abrirse el teclado (ni al cerrar el aviso de nivel).
+    _hideKeyboard();
     final g = widget.game;
     if (t.doneToday) {
       g.undo(t);
@@ -42,16 +49,16 @@ class _MissionsScreenState extends State<MissionsScreen> {
       final unlocked = catalog.where((b) => b.level > r.levelFrom && b.level <= r.levelTo).map((b) => b.name);
       showPixelDialog(
         context,
-        '¡Nivel ${r.levelTo}!',
-        unlocked.isEmpty ? 'Sigue así, alcalde.' : 'Desbloqueaste: ${unlocked.join(', ')}.',
+        L.f('m.levelUp', {'n': r.levelTo}),
+        unlocked.isEmpty ? L.t('m.keepGoing') : L.f('m.unlocked', {'list': unlocked.join(', ')}),
       );
       return;
     }
-    var msg = '+${r.xp} XP · +${r.gold} oro';
+    var msg = L.f('m.gain', {'xp': r.xp, 'gold': r.gold});
     if (r.newRecord) {
-      msg += ' · Nuevo récord';
+      msg += L.t('m.newRecord');
     } else if (r.arrived > 0) {
-      msg += r.arrived > 1 ? ' · Llegaron ${r.arrived} vecinos' : ' · Llegó un vecino';
+      msg += r.arrived > 1 ? L.f('m.manyArrived', {'n': r.arrived}) : L.t('m.oneArrived');
     }
     showToast(context, msg);
   }
@@ -65,72 +72,72 @@ class _MissionsScreenState extends State<MissionsScreen> {
     final goldToday = g.goldToday;
     final record = g.goldRecord;
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-      children: [
-        if (g.isSample) ...[
-          Container(
-            padding: const EdgeInsets.only(left: 10),
-            decoration: const BoxDecoration(border: Border(left: BorderSide(color: C.gold, width: 4))),
-            child: Text(
-              'Estás viendo datos de ejemplo. Puedes jugar con ellos o empezar de cero desde la pestaña Avance.',
-              style: T.body(14, C.dim),
+    Widget row(Task t) => _TaskRow(task: t, onToggle: () => _toggle(t), onDelete: () => g.deleteTask(t));
+
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: _hideKeyboard,
+      child: ListView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        children: [
+          if (g.isSample) ...[
+            Container(
+              padding: const EdgeInsets.only(left: 10),
+              decoration: BoxDecoration(border: Border(left: BorderSide(color: C.gold, width: 4))),
+              child: Text(L.t('m.sample'), style: T.body(14, C.dim)),
+            ),
+            const SizedBox(height: 16),
+          ],
+          PixelBox(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Expanded(child: _Figure(label: L.t('m.goldToday'), value: fmt(goldToday), color: C.gold)),
+                  Expanded(child: _Figure(label: L.t('m.record'), value: fmt(record))),
+                ]),
+                const SizedBox(height: 12),
+                PixelBar(value: record == 0 ? 0.0 : goldToday / record, color: C.gold),
+                const SizedBox(height: 4),
+                Text(
+                  record > 0 && goldToday >= record
+                      ? L.t('m.bestDay')
+                      : L.f('m.toRecord', {'n': fmt((record - goldToday).clamp(0, record).toInt())}),
+                  style: T.body(13, C.dim),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 16),
-        ],
-        PixelBox(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(children: [
-                Expanded(child: _Figure(label: 'Oro de hoy', value: fmt(goldToday), color: C.gold)),
-                Expanded(child: _Figure(label: 'Récord diario', value: fmt(record))),
-              ]),
-              const SizedBox(height: 12),
-              PixelBar(value: record == 0 ? 0.0 : goldToday / record, color: C.gold),
-              const SizedBox(height: 4),
-              Text(
-                record > 0 && goldToday >= record
-                    ? 'Hoy es tu mejor día'
-                    : 'Te faltan ${fmt((record - goldToday).clamp(0, record).toInt())} de oro para el récord',
-                style: T.body(13, C.dim),
-              ),
-            ],
+          _AddForm(
+            controller: _title,
+            focusNode: _titleFocus,
+            kind: _kind,
+            diff: _diff,
+            onKind: (v) => setState(() => _kind = v),
+            onDiff: (v) => setState(() => _diff = v),
+            onSubmit: _add,
           ),
-        ),
-        const SizedBox(height: 16),
-        _AddForm(
-          controller: _title,
-          kind: _kind,
-          diff: _diff,
-          onKind: (v) => setState(() => _kind = v),
-          onDiff: (v) => setState(() => _diff = v),
-          onSubmit: _add,
-        ),
-        const SizedBox(height: 20),
-        const SectionTitle('Hábitos diarios'),
-        const SizedBox(height: 8),
-        if (habits.isEmpty)
-          _Empty(g.tasks.any((t) => t.isHabit)
-              ? 'Todos los hábitos de hoy están hechos'
-              : 'Agrega un hábito que quieras repetir cada día')
-        else
-          ...habits.map((t) => _TaskRow(task: t, onToggle: () => _toggle(t), onDelete: () => g.deleteTask(t))),
-        const SizedBox(height: 20),
-        const SectionTitle('Misiones'),
-        const SizedBox(height: 8),
-        if (missions.isEmpty)
-          const _Empty('Sin misiones pendientes. Agrega una arriba.')
-        else
-          ...missions.map((t) => _TaskRow(task: t, onToggle: () => _toggle(t), onDelete: () => g.deleteTask(t))),
-        if (done.isNotEmpty) ...[
           const SizedBox(height: 20),
-          const SectionTitle('Completadas hoy'),
+          SectionTitle(L.t('m.habits')),
           const SizedBox(height: 8),
-          ...done.map((t) => _TaskRow(task: t, onToggle: () => _toggle(t), onDelete: () => g.deleteTask(t))),
+          if (habits.isEmpty)
+            _Empty(g.tasks.any((t) => t.isHabit) ? L.t('m.habitsDone') : L.t('m.habitsEmpty'))
+          else
+            ...habits.map(row),
+          const SizedBox(height: 20),
+          SectionTitle(L.t('m.missions')),
+          const SizedBox(height: 8),
+          if (missions.isEmpty) _Empty(L.t('m.missionsEmpty')) else ...missions.map(row),
+          if (done.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            SectionTitle(L.t('m.doneToday')),
+            const SizedBox(height: 8),
+            ...done.map(row),
+          ],
         ],
-      ],
+      ),
     );
   }
 }
@@ -138,8 +145,8 @@ class _MissionsScreenState extends State<MissionsScreen> {
 class _Figure extends StatelessWidget {
   final String label;
   final String value;
-  final Color color;
-  const _Figure({required this.label, required this.value, this.color = C.fg});
+  final Color? color;
+  const _Figure({required this.label, required this.value, this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -153,6 +160,7 @@ class _Figure extends StatelessWidget {
 
 class _AddForm extends StatelessWidget {
   final TextEditingController controller;
+  final FocusNode focusNode;
   final String kind;
   final String diff;
   final ValueChanged<String> onKind;
@@ -160,6 +168,7 @@ class _AddForm extends StatelessWidget {
   final VoidCallback onSubmit;
   const _AddForm({
     required this.controller,
+    required this.focusNode,
     required this.kind,
     required this.diff,
     required this.onKind,
@@ -174,36 +183,27 @@ class _AddForm extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SectionTitle('Nueva misión o hábito'),
+          SectionTitle(L.t('m.new')),
           const SizedBox(height: 8),
           TextField(
             controller: controller,
+            focusNode: focusNode,
             maxLength: 80,
             style: T.body(16),
             textInputAction: TextInputAction.done,
             onSubmitted: (_) => onSubmit(),
-            decoration: InputDecoration(
-              hintText: 'Ej. Caminar 20 minutos',
-              hintStyle: T.body(16, C.dim),
-              counterText: '',
-              filled: true,
-              fillColor: C.bg,
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-              border: const OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: C.ink, width: 3)),
-              enabledBorder: const OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: C.ink, width: 3)),
-              focusedBorder: const OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: C.xp, width: 3)),
-            ),
+            onTapOutside: (_) => focusNode.unfocus(),
+            decoration: pixelInput(hint: L.t('m.hint')),
           ),
           const SizedBox(height: 12),
-          Text('Tipo', style: T.body(13, C.dim)),
+          Text(L.t('m.type'), style: T.body(13, C.dim)),
           const SizedBox(height: 6),
           Wrap(spacing: 8, runSpacing: 8, children: [
-            PixelChoice(label: 'Hábito diario', selected: kind == 'habito', onTap: () => onKind('habito')),
-            PixelChoice(label: 'Misión única', selected: kind == 'mision', onTap: () => onKind('mision')),
+            PixelChoice(label: L.t('m.habit'), selected: kind == 'habito', onTap: () => onKind('habito')),
+            PixelChoice(label: L.t('m.once'), selected: kind == 'mision', onTap: () => onKind('mision')),
           ]),
           const SizedBox(height: 12),
-          Text('Dificultad', style: T.body(13, C.dim)),
+          Text(L.t('m.difficulty'), style: T.body(13, C.dim)),
           const SizedBox(height: 6),
           Wrap(spacing: 8, runSpacing: 8, children: [
             for (final e in difficulties.values)
@@ -211,9 +211,9 @@ class _AddForm extends StatelessWidget {
           ]),
           const SizedBox(height: 14),
           Row(children: [
-            Expanded(child: Text('Recompensa: +${d.xp} XP · +${d.gold} oro', style: T.body(13, C.dim))),
+            Expanded(child: Text(L.f('m.reward', {'xp': d.xp, 'gold': d.gold}), style: T.body(13, C.dim))),
             const SizedBox(width: 10),
-            PixelButton(label: 'Agregar', onPressed: onSubmit),
+            PixelButton(label: L.t('m.add'), onPressed: onSubmit),
           ]),
         ],
       ),
@@ -243,7 +243,7 @@ class _TaskRow extends StatelessWidget {
           child: Row(children: [
             Semantics(
               button: true,
-              label: done ? 'Desmarcar ${task.title}' : 'Completar ${task.title}',
+              label: L.f(done ? 'm.uncheck' : 'm.complete', {'t': task.title}),
               child: GestureDetector(
                 onTap: onToggle,
                 child: Container(
@@ -254,7 +254,7 @@ class _TaskRow extends StatelessWidget {
                     color: done ? C.good : C.bg,
                     border: Border.all(color: C.ink, width: 3),
                   ),
-                  child: done ? Text('✓', style: T.display(18, C.ink)) : null,
+                  child: done ? Text('✓', style: T.display(18, C.onAccent)) : null,
                 ),
               ),
             ),
@@ -268,14 +268,14 @@ class _TaskRow extends StatelessWidget {
                 const SizedBox(height: 4),
                 Wrap(spacing: 6, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
                   PixelChip(d.name, color: C.forDifficulty(d.id)),
-                  Text('+${d.xp} XP · +${d.gold} oro', style: T.body(12, C.dim)),
-                  if (streak > 0) PixelChip('Racha $streak', color: C.bad, textColor: C.fg),
+                  Text(L.f('m.gain', {'xp': d.xp, 'gold': d.gold}), style: T.body(12, C.dim)),
+                  if (streak > 0) PixelChip(L.f('m.streak', {'n': streak}), color: C.bad, textColor: C.fg),
                 ]),
               ]),
             ),
             Semantics(
               button: true,
-              label: 'Borrar ${task.title}',
+              label: L.f('m.delete', {'t': task.title}),
               child: GestureDetector(
                 onTap: onDelete,
                 child: Container(

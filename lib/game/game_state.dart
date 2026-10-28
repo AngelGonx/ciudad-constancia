@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../i18n/strings.dart';
 import 'rules.dart';
 
 String dayKey(DateTime d) =>
@@ -68,6 +69,7 @@ class Task {
       );
 }
 
+/// Avatar: los colores se guardan como ARGB para permitir cualquier color.
 class Avatar {
   int skin;
   String hair;
@@ -76,17 +78,36 @@ class Avatar {
   int pants;
   String accessory;
 
-  Avatar({this.skin = 1, this.hair = 'corto', this.hairColor = 0, this.shirt = 0, this.pants = 6, this.accessory = 'ninguno'});
+  Avatar({
+    this.skin = 0xFFE0AC7E,
+    this.hair = 'corto',
+    this.hairColor = 0xFF2A1D17,
+    this.shirt = 0xFF3D78A8,
+    this.pants = 0xFF2F2F3A,
+    this.accessory = 'ninguno',
+  });
 
   Map<String, dynamic> toJson() =>
       {'skin': skin, 'hair': hair, 'hairColor': hairColor, 'shirt': shirt, 'pants': pants, 'accessory': accessory};
 
+  // Versiones anteriores guardaban un índice de paleta; se convierte a color.
+  static const _oldSkin = [0xFFF6D2B0, 0xFFE0AC7E, 0xFFB9784F, 0xFF7A4A2E];
+  static const _oldHair = [0xFF2A1D17, 0xFF6B3F2A, 0xFFC98A3C, 0xFFE8D27A, 0xFFB84A3A, 0xFF8A8A9A];
+  static const _oldCloth = [0xFF3D78A8, 0xFFD24C4C, 0xFF3E8C56, 0xFFF4B942, 0xFF8C5A8F, 0xFFEFE6D6, 0xFF2F2F3A];
+
+  static int _color(Object? v, List<int> old, int fallback) {
+    if (v is! num) return fallback;
+    final i = v.toInt();
+    if (i >= 0 && i < old.length) return old[i];
+    return i;
+  }
+
   factory Avatar.fromJson(Map<String, dynamic> j) => Avatar(
-        skin: (j['skin'] as num?)?.toInt() ?? 1,
+        skin: _color(j['skin'], _oldSkin, 0xFFE0AC7E),
         hair: j['hair'] as String? ?? 'corto',
-        hairColor: (j['hairColor'] as num?)?.toInt() ?? 0,
-        shirt: (j['shirt'] as num?)?.toInt() ?? 0,
-        pants: (j['pants'] as num?)?.toInt() ?? 6,
+        hairColor: _color(j['hairColor'], _oldHair, 0xFF2A1D17),
+        shirt: _color(j['shirt'], _oldCloth, 0xFF3D78A8),
+        pants: _color(j['pants'], _oldCloth, 0xFF2F2F3A),
         accessory: j['accessory'] as String? ?? 'ninguno',
       );
 }
@@ -125,6 +146,9 @@ class CompleteResult {
 class GameState extends ChangeNotifier {
   static const _storageKey = 'pixel_todo_state_v1';
 
+  /// Idioma elegido ('es' o 'en'); null hasta que se elige en el primer inicio.
+  String? language;
+  bool lightTheme = false;
   String name = 'Alcalde';
   int xp = 0;
   int gold = 100;
@@ -156,6 +180,7 @@ class GameState extends ChangeNotifier {
     } catch (_) {
       _fillSample();
     }
+    L.lang = language ?? 'es';
     notifyListeners();
   }
 
@@ -174,13 +199,15 @@ class GameState extends ChangeNotifier {
   }
 
   Map<String, dynamic> _toJson() => {
-        'name': name, 'xp': xp, 'gold': gold, 'population': population, 'totalDone': totalDone,
+        'language': language, 'lightTheme': lightTheme, 'name': name, 'xp': xp, 'gold': gold, 'population': population, 'totalDone': totalDone,
         'bestStreak': bestStreak, 'isSample': isSample, 'avatar': avatar.toJson(), 'buildings': buildings,
         'tasks': tasks.map((t) => t.toJson()).toList(),
         'history': history.map((k, v) => MapEntry(k, v.toJson())),
       };
 
   void _fromJson(Map<String, dynamic> j) {
+    language = j['language'] as String?;
+    lightTheme = j['lightTheme'] as bool? ?? false;
     name = j['name'] as String? ?? 'Alcalde';
     xp = (j['xp'] as num?)?.toInt() ?? 0;
     gold = (j['gold'] as num?)?.toInt() ?? 0;
@@ -200,13 +227,12 @@ class GameState extends ChangeNotifier {
   /// Datos de ejemplo para la primera vez que se abre la app.
   void _fillSample() {
     isSample = true;
-    name = 'Alcalde Ángel';
+    name = L.t('mayor');
     xp = 2350;
     gold = 480;
     population = 4;
     totalDone = 41;
     bestStreak = 6;
-    avatar = Avatar();
     buildings = ['hogar', 'casa', 'tiendita', 'pozo', 'poste'];
     history = {};
     const week = [[420, 70], [780, 135], [300, 55], [950, 160], [600, 100], [520, 90]];
@@ -216,18 +242,18 @@ class GameState extends ChangeNotifier {
     history[today()] = DayStat();
     final y = dayOffset(-1);
     tasks = [
-      Task(id: _newId(), title: 'Tender la cama', kind: 'habito', diff: 'facil', streak: 6, last: y),
-      Task(id: _newId(), title: 'Leer 20 minutos', kind: 'habito', diff: 'media', streak: 3, last: y),
-      Task(id: _newId(), title: 'Ejercicio 30 minutos', kind: 'habito', diff: 'dificil', streak: 1, last: y),
-      Task(id: _newId(), title: 'Pagar el recibo de luz', kind: 'mision', diff: 'media'),
-      Task(id: _newId(), title: 'Organizar el escritorio', kind: 'mision', diff: 'facil'),
-      Task(id: _newId(), title: 'Avanzar 1 hora en Pixel To-Do', kind: 'mision', diff: 'epica'),
+      Task(id: _newId(), title: L.t('ex.1'), kind: 'habito', diff: 'facil', streak: 6, last: y),
+      Task(id: _newId(), title: L.t('ex.2'), kind: 'habito', diff: 'media', streak: 3, last: y),
+      Task(id: _newId(), title: L.t('ex.3'), kind: 'habito', diff: 'dificil', streak: 1, last: y),
+      Task(id: _newId(), title: L.t('ex.4'), kind: 'mision', diff: 'media'),
+      Task(id: _newId(), title: L.t('ex.5'), kind: 'mision', diff: 'facil'),
+      Task(id: _newId(), title: L.t('ex.6'), kind: 'mision', diff: 'epica'),
     ];
   }
 
   /// Borra todo y empieza con una casita. El avatar se conserva.
   void reset() {
-    name = isSample ? 'Alcalde' : name;
+    name = isSample ? L.t('mayor') : name;
     isSample = false;
     xp = 0;
     gold = 100;
@@ -346,14 +372,14 @@ class GameState extends ChangeNotifier {
 
   /// Motivo por el que no se puede construir, o null si sí se puede.
   String? blockReason(BuildingType b) {
-    if (level < b.level) return 'Nivel ${b.level}';
-    if (b.unique && buildings.contains(b.id)) return 'Construido';
+    if (level < b.level) return L.f('c.reasonLevel', {'n': b.level});
+    if (b.unique && buildings.contains(b.id)) return L.t('c.reasonBuilt');
     if (b.id == 'palacio') {
       final c = city();
-      if (c.happiness < palaceHappiness) return 'Felicidad $palaceHappiness%';
-      if (population < palacePopulation) return '$palacePopulation hab.';
+      if (c.happiness < palaceHappiness) return L.f('c.reasonHappy', {'n': palaceHappiness});
+      if (population < palacePopulation) return L.f('c.reasonPop', {'n': palacePopulation});
     }
-    if (gold < b.cost) return 'Falta oro';
+    if (gold < b.cost) return L.t('c.reasonGold');
     return null;
   }
 
@@ -365,8 +391,22 @@ class GameState extends ChangeNotifier {
     return true;
   }
 
+  /// Elige idioma. En el primer inicio, los datos de ejemplo se rehacen en ese idioma.
+  void setLanguage(String lang) {
+    final firstTime = language == null;
+    language = lang;
+    L.lang = lang;
+    if (firstTime && isSample && lang != 'es') _fillSample();
+    _commit();
+  }
+
+  void setLightTheme(bool light) {
+    lightTheme = light;
+    _commit();
+  }
+
   void setName(String value) {
-    name = value.trim().isEmpty ? 'Alcalde' : value.trim();
+    name = value.trim().isEmpty ? L.t('mayor') : value.trim();
     _commit();
   }
 

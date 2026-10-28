@@ -3,21 +3,17 @@ import 'package:flutter/services.dart';
 
 import 'game/game_state.dart';
 import 'game/rules.dart';
+import 'i18n/strings.dart';
 import 'screens/avatar_screen.dart';
 import 'screens/city_screen.dart';
 import 'screens/missions_screen.dart';
 import 'screens/progress_screen.dart';
+import 'screens/settings_screen.dart';
 import 'ui/pixel.dart';
 import 'ui/sprites.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: C.bg,
-    statusBarIconBrightness: Brightness.light,
-    systemNavigationBarColor: C.panel,
-    systemNavigationBarIconBrightness: Brightness.light,
-  ));
   final game = GameState();
   await game.load();
   runApp(PixelTodoApp(game: game));
@@ -29,11 +25,26 @@ class PixelTodoApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Pixel To-Do',
-      debugShowCheckedModeBanner: false,
-      theme: pixelTheme(),
-      home: HomeShell(game: game),
+    return ListenableBuilder(
+      listenable: game,
+      builder: (context, _) {
+        // Idioma y tema se aplican aquí para que toda la app se redibuje al cambiarlos.
+        L.lang = game.language ?? 'es';
+        C.useLight(game.lightTheme);
+        final iconBrightness = game.lightTheme ? Brightness.dark : Brightness.light;
+        SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
+          statusBarColor: C.bg,
+          statusBarIconBrightness: iconBrightness,
+          systemNavigationBarColor: C.panel,
+          systemNavigationBarIconBrightness: iconBrightness,
+        ));
+        return MaterialApp(
+          title: 'Pixel To-Do',
+          debugShowCheckedModeBanner: false,
+          theme: pixelTheme(),
+          home: game.language == null ? LanguageScreen(game: game) : HomeShell(game: game),
+        );
+      },
     );
   }
 }
@@ -48,62 +59,66 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _tab = 0;
-  static const _tabs = ['Misiones', 'Ciudad', 'Avance', 'Avatar'];
+  static const _tabs = ['tab.missions', 'tab.city', 'tab.progress', 'tab.avatar'];
+
+  void _openSettings() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SettingsScreen(game: widget.game)));
+  }
 
   @override
   Widget build(BuildContext context) {
     final g = widget.game;
-    return ListenableBuilder(
-      listenable: g,
-      builder: (context, _) {
-        final pages = <Widget>[
-          MissionsScreen(game: g),
-          CityScreen(game: g),
-          ProgressScreen(game: g),
-          AvatarScreen(game: g),
-        ];
-        return Scaffold(
-          body: SafeArea(
-            bottom: false,
-            child: Column(children: [
-              _Header(game: g),
-              Expanded(
-                child: IndexedStack(
-                  index: _tab,
-                  children: [
-                    for (var i = 0; i < pages.length; i++) TickerMode(enabled: i == _tab, child: pages[i]),
-                  ],
+    final pages = <Widget>[
+      MissionsScreen(game: g),
+      CityScreen(game: g),
+      ProgressScreen(game: g),
+      AvatarScreen(game: g),
+    ];
+    return Scaffold(
+      backgroundColor: C.bg,
+      body: SafeArea(
+        bottom: false,
+        child: Column(children: [
+          _Header(game: g, onSettings: _openSettings),
+          Expanded(
+            child: IndexedStack(
+              index: _tab,
+              children: [
+                for (var i = 0; i < pages.length; i++) TickerMode(enabled: i == _tab, child: pages[i]),
+              ],
+            ),
+          ),
+        ]),
+      ),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: C.panel,
+          border: Border(top: BorderSide(color: C.ink, width: 3)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(children: [
+              for (var i = 0; i < _tabs.length; i++)
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: _TabButton(
+                      label: L.t(_tabs[i]),
+                      selected: i == _tab,
+                      onTap: () {
+                        FocusManager.instance.primaryFocus?.unfocus();
+                        setState(() => _tab = i);
+                      },
+                    ),
+                  ),
                 ),
-              ),
             ]),
           ),
-          bottomNavigationBar: Container(
-            decoration: const BoxDecoration(
-              color: C.panel,
-              border: Border(top: BorderSide(color: C.ink, width: 3)),
-            ),
-            child: SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: Row(children: [
-                  for (var i = 0; i < _tabs.length; i++)
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: _TabButton(
-                          label: _tabs[i],
-                          selected: i == _tab,
-                          onTap: () => setState(() => _tab = i),
-                        ),
-                      ),
-                    ),
-                ]),
-              ),
-            ),
-          ),
-        );
-      },
+        ),
+      ),
     );
   }
 }
@@ -144,7 +159,8 @@ class _TabButton extends StatelessWidget {
 
 class _Header extends StatelessWidget {
   final GameState game;
-  const _Header({required this.game});
+  final VoidCallback onSettings;
+  const _Header({required this.game, required this.onSettings});
 
   @override
   Widget build(BuildContext context) {
@@ -153,7 +169,7 @@ class _Header extends StatelessWidget {
     final next = levelNext(lvl);
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: C.bg,
         border: Border(bottom: BorderSide(color: C.ink, width: 3)),
       ),
@@ -168,7 +184,7 @@ class _Header extends StatelessWidget {
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              PixelChip('NV $lvl', color: C.xp),
+              PixelChip(L.f('hdr.level', {'n': lvl}), color: C.xp),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(game.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.display(13)),
@@ -180,7 +196,7 @@ class _Header extends StatelessWidget {
             Text('${fmt(game.xp)} / ${fmt(next)} XP', style: T.body(12, C.dim)),
           ]),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 10),
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
           Row(mainAxisSize: MainAxisSize.min, children: [
             const Coin(),
@@ -188,8 +204,10 @@ class _Header extends StatelessWidget {
             Text(fmt(game.gold), style: T.display(16, C.gold)),
           ]),
           const SizedBox(height: 4),
-          Text('hoy +${fmt(game.goldToday)}', style: T.body(12, C.dim)),
+          Text(L.f('hdr.today', {'n': fmt(game.goldToday)}), style: T.body(12, C.dim)),
         ]),
+        const SizedBox(width: 10),
+        GearButton(onTap: onSettings),
       ]),
     );
   }

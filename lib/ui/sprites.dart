@@ -4,21 +4,23 @@ import 'package:flutter/material.dart';
 
 import '../game/game_state.dart';
 
-// Paletas del avatar.
-const List<Color> skinColors = [Color(0xFFF6D2B0), Color(0xFFE0AC7E), Color(0xFFB9784F), Color(0xFF7A4A2E)];
+// Colores sugeridos del avatar (además del color libre).
+const List<Color> skinColors = [
+  Color(0xFFF6D2B0), Color(0xFFEBC097), Color(0xFFE0AC7E), Color(0xFFC98E5E), Color(0xFFB9784F),
+  Color(0xFF8F5A3A), Color(0xFF7A4A2E), Color(0xFF5A3420),
+];
 const List<Color> hairColors = [
-  Color(0xFF2A1D17), Color(0xFF6B3F2A), Color(0xFFC98A3C), Color(0xFFE8D27A), Color(0xFFB84A3A), Color(0xFF8A8A9A),
+  Color(0xFF2A1D17), Color(0xFF6B3F2A), Color(0xFFC98A3C), Color(0xFFE8D27A), Color(0xFFB84A3A),
+  Color(0xFF8A8A9A), Color(0xFFEFEFEF), Color(0xFF4F6FD8), Color(0xFFD86BB0), Color(0xFF3E8C56),
 ];
 const List<Color> clothColors = [
-  Color(0xFF3D78A8), Color(0xFFD24C4C), Color(0xFF3E8C56), Color(0xFFF4B942), Color(0xFF8C5A8F), Color(0xFFEFE6D6),
-  Color(0xFF2F2F3A),
+  Color(0xFF3D78A8), Color(0xFFD24C4C), Color(0xFF3E8C56), Color(0xFFF4B942), Color(0xFF8C5A8F),
+  Color(0xFFEFE6D6), Color(0xFF2F2F3A), Color(0xFFE07A3A), Color(0xFF62CFC0), Color(0xFFD86BB0),
 ];
-const List<List<String>> hairStyles = [
-  ['corto', 'Corto'], ['largo', 'Largo'], ['picos', 'Picos'], ['chongo', 'Chongo'], ['calvo', 'Calvo'],
+const List<String> hairStyles = [
+  'corto', 'flequillo', 'raya', 'picos', 'rizado', 'afro', 'mohicano', 'largo', 'coleta', 'trenzas', 'chongo', 'calvo',
 ];
-const List<List<String>> accessories = [['ninguno', 'Nada'], ['lentes', 'Lentes'], ['gorra', 'Gorra']];
-
-Color _pick(List<Color> list, int i) => list[i.clamp(0, list.length - 1).toInt()];
+const List<String> accessories = ['ninguno', 'lentes', 'gorra'];
 
 /// Dibuja rectángulos en una cuadrícula de píxeles lógicos.
 class Px {
@@ -48,10 +50,10 @@ const _ink = Color(0xFF0F0B14);
 /// Avatar de 16 × 16 píxeles.
 void drawAvatar(Canvas canvas, Avatar a, double ox, double oy, double s) {
   final p = Px(canvas, ox: ox, oy: oy, s: s);
-  final sk = _pick(skinColors, a.skin);
-  final hc = _pick(hairColors, a.hairColor);
-  final sh = _pick(clothColors, a.shirt);
-  final pa = _pick(clothColors, a.pants);
+  final sk = Color(a.skin);
+  final hc = Color(a.hairColor);
+  final sh = Color(a.shirt);
+  final pa = Color(a.pants);
   const shoe = Color(0xFF2A1D17);
 
   p.r(_ink, 4, 2, 8, 8);
@@ -70,28 +72,76 @@ void drawAvatar(Canvas canvas, Avatar a, double ox, double oy, double s) {
   p.r(shoe, 5, 15, 2, 1);
   p.r(shoe, 9, 15, 2, 1);
 
-  if (a.hair != 'calvo') {
+  // Base corta que comparten varios peinados.
+  void base() {
     p.r(hc, 5, 2, 6, 2);
     p.r(hc, 4, 3, 1, 2);
     p.r(hc, 11, 3, 1, 2);
   }
+
   switch (a.hair) {
-    case 'largo':
-      p.r(hc, 4, 3, 1, 7);
-      p.r(hc, 11, 3, 1, 7);
+    case 'corto':
+      base();
+      break;
+    case 'flequillo':
+      base();
+      p.r(hc, 5, 4, 6, 1);
+      break;
+    case 'raya':
+      p.r(hc, 5, 2, 6, 2);
+      p.r(hc, 4, 3, 1, 3);
+      p.r(hc, 11, 3, 1, 2);
+      p.r(hc, 5, 4, 3, 1);
       break;
     case 'picos':
+      base();
       p.r(hc, 5, 1);
       p.r(hc, 7, 1);
       p.r(hc, 9, 1);
       p.r(hc, 10, 1);
       break;
+    case 'rizado':
+      p.r(hc, 4, 1, 8, 3);
+      for (var x = 4; x < 12; x += 2) {
+        p.r(hc, x, 0);
+      }
+      p.r(hc, 4, 4, 1, 2);
+      p.r(hc, 11, 4, 1, 2);
+      break;
+    case 'afro':
+      p.r(hc, 3, 0, 10, 4);
+      p.r(hc, 3, 4, 2, 4);
+      p.r(hc, 11, 4, 2, 4);
+      break;
+    case 'mohicano':
+      p.r(hc, 7, 0, 2, 4);
+      break;
+    case 'largo':
+      base();
+      p.r(hc, 4, 3, 1, 7);
+      p.r(hc, 11, 3, 1, 7);
+      break;
+    case 'coleta':
+      base();
+      p.r(hc, 12, 3, 1, 2);
+      p.r(hc, 13, 4, 1, 5);
+      break;
+    case 'trenzas':
+      base();
+      p.r(hc, 4, 5, 1, 6);
+      p.r(hc, 11, 5, 1, 6);
+      p.r(const Color(0xFFD24C4C), 4, 11);
+      p.r(const Color(0xFFD24C4C), 11, 11);
+      break;
     case 'chongo':
+      base();
       p.r(hc, 7, 0, 2, 2);
       break;
     case 'calvo':
       p.r(const Color(0x59FFFFFF), 6, 3, 2, 1);
       break;
+    default:
+      base();
   }
   if (a.accessory == 'lentes') {
     p.r(_ink, 5, 5, 6, 1);

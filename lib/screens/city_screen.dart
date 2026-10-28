@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../game/game_state.dart';
 import '../game/rules.dart';
+import '../i18n/strings.dart';
 import '../ui/city_view.dart';
 import '../ui/pixel.dart';
 import '../ui/sprites.dart';
@@ -13,10 +14,9 @@ class CityScreen extends StatelessWidget {
   void _build(BuildContext context, BuildingType b) {
     if (!game.build(b)) return;
     if (b.id == 'palacio') {
-      showPixelDialog(context, '¡Palacio municipal!',
-          'Tu ciudad ya tiene gobierno. Desde aquí gobiernas Ciudad Constancia.');
+      showPixelDialog(context, L.t('c.palaceTitle'), L.t('c.palaceBody'));
     } else {
-      showToast(context, '${b.name}: construido');
+      showToast(context, L.f('c.built', {'name': b.name}));
     }
   }
 
@@ -26,13 +26,11 @@ class CityScreen extends StatelessWidget {
     final felColor = c.happiness >= 70 ? C.good : (c.happiness >= 60 ? C.gold : C.bad);
 
     final bonusText = c.bonus > 0
-        ? 'Ciudad equilibrada: +${(c.bonus * 100).round()}% de oro por misión. '
-        : 'Con 70% de felicidad ganas +10% de oro, con 90% ganas +20%. ';
+        ? L.f('c.bonusOn', {'n': (c.bonus * 100).round()})
+        : L.t('c.bonusOff');
     final arrivalText = !c.acceptsNewcomers
-        ? 'Nadie se muda mientras la felicidad esté bajo 60%.'
-        : (c.population < c.housing
-            ? 'Llega gente nueva al completar misiones.'
-            : 'Construye casas para que llegue más gente.');
+        ? L.t('c.noArrivals')
+        : (c.population < c.housing ? L.t('c.arrivals') : L.t('c.needHomes'));
 
     final shop = <Widget>[];
     String? lastCat;
@@ -41,7 +39,7 @@ class CityScreen extends StatelessWidget {
         lastCat = b.category;
         shop.add(Padding(
           padding: const EdgeInsets.only(top: 10, bottom: 6),
-          child: Text(categoryNames[b.category]!.toUpperCase(),
+          child: Text(categoryName(b.category).toUpperCase(),
               style: T.display(11, C.gold).copyWith(letterSpacing: 1)),
         ));
       }
@@ -60,7 +58,7 @@ class CityScreen extends StatelessWidget {
           decoration: BoxDecoration(
             color: C.grass,
             border: Border.all(color: C.ink, width: 3),
-            boxShadow: const [BoxShadow(color: C.ink, offset: Offset(0, 4))],
+            boxShadow: hardShadow(),
           ),
           child: CityView(game: game),
         ),
@@ -70,12 +68,12 @@ class CityScreen extends StatelessWidget {
             Row(children: [
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const SectionTitle('Felicidad'),
+                  SectionTitle(L.t('c.happiness')),
                   Text('${c.happiness}%', style: T.display(22, felColor)),
                 ]),
               ),
               Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                const SectionTitle('Habitantes'),
+                SectionTitle(L.t('c.population')),
                 Text('${c.population} / ${c.housing}', style: T.display(22)),
               ]),
             ]),
@@ -88,7 +86,7 @@ class CityScreen extends StatelessWidget {
         const SizedBox(height: 16),
         _PalaceGoal(game: game, stats: c),
         const SizedBox(height: 20),
-        const SectionTitle('Construir'),
+        SectionTitle(L.t('c.build')),
         ...shop,
       ],
     );
@@ -107,7 +105,7 @@ class _NeedsGrid extends StatelessWidget {
       final low = cap < n;
       return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Expanded(child: Text(categoryNames[k]!, style: T.body(13))),
+          Expanded(child: Text(categoryName(k), style: T.body(13))),
           Text('$cap / $n', style: T.body(13, low ? C.bad : C.fg)),
         ]),
         const SizedBox(height: 3),
@@ -140,9 +138,9 @@ class _PalaceGoal extends StatelessWidget {
     if (game.hasPalace) {
       return PixelBox(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Palacio municipal construido', style: T.display(16)),
+          Text(L.t('c.palaceDone'), style: T.display(16)),
           const SizedBox(height: 6),
-          Text('Ya gobiernas tu ciudad. Sigue creciendo hasta llenar cada lote.', style: T.body(14, C.dim)),
+          Text(L.t('c.palaceDoneBody'), style: T.body(14, C.dim)),
         ]),
       );
     }
@@ -156,12 +154,12 @@ class _PalaceGoal extends StatelessWidget {
         );
     return PixelBox(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Meta: Palacio municipal', style: T.display(16)),
+        Text(L.t('c.goal'), style: T.display(16)),
         const SizedBox(height: 4),
-        check(game.level >= palace.level, 'Nivel ${palace.level} (tienes ${game.level})'),
-        check(stats.happiness >= palaceHappiness, 'Felicidad $palaceHappiness% (tienes ${stats.happiness}%)'),
-        check(stats.population >= palacePopulation, '$palacePopulation habitantes (tienes ${stats.population})'),
-        check(game.gold >= palace.cost, '${fmt(palace.cost)} de oro (tienes ${fmt(game.gold)})'),
+        check(game.level >= palace.level, L.f('c.goalLevel', {'need': palace.level, 'have': game.level})),
+        check(stats.happiness >= palaceHappiness, L.f('c.goalHappy', {'need': palaceHappiness, 'have': stats.happiness})),
+        check(stats.population >= palacePopulation, L.f('c.goalPop', {'need': palacePopulation, 'have': stats.population})),
+        check(game.gold >= palace.cost, L.f('c.goalGold', {'need': fmt(palace.cost), 'have': fmt(game.gold)})),
       ]),
     );
   }
@@ -202,7 +200,7 @@ class _ShopItem extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             PixelButton(
-              label: reason ?? 'Construir',
+              label: reason ?? L.t('c.build'),
               onPressed: reason == null ? onBuild : null,
               fontSize: 11,
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),

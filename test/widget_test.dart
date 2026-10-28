@@ -29,9 +29,18 @@ void main() {
     expect(g.gold, gold);
   });
 
+  testWidgets('primer inicio pide idioma', (tester) async {
+    final g = GameState();
+    await g.load();
+    await tester.pumpWidget(PixelTodoApp(game: g));
+    await tester.pump();
+    expect(find.text('English'), findsOneWidget);
+  });
+
   testWidgets('la app abre en Misiones', (tester) async {
     final g = GameState();
     await g.load();
+    g.setLanguage('es');
     await tester.pumpWidget(PixelTodoApp(game: g));
     await tester.pump();
     expect(find.text('Misiones'), findsWidgets);
