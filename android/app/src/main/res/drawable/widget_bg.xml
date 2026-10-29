@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fondo del widget: plaza de noche con borde grueso, sin esquinas redondeadas -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#241C2E" />
+    <stroke android:width="3dp" android:color="#0F0B14" />
+</shape>

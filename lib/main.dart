@@ -11,6 +11,7 @@ import 'screens/city_screen.dart';
 import 'screens/missions_screen.dart';
 import 'screens/progress_screen.dart';
 import 'screens/settings_screen.dart';
+import 'services/home_widget_sync.dart';
 import 'services/reminders.dart';
 import 'services/store.dart';
 import 'ui/pixel.dart';
@@ -21,8 +22,13 @@ Future<void> main() async {
   final game = GameState();
   await game.load();
   await Reminders.init();
-  game.onChanged = Reminders.scheduleSoon;
+  await HomeWidgetSync.init();
+  game.onChanged = (g) {
+    Reminders.scheduleSoon(g);
+    HomeWidgetSync.pushSoon(g);
+  };
   Reminders.scheduleSoon(game);
+  HomeWidgetSync.pushSoon(game);
   runApp(PixelTodoApp(game: game));
   // La tienda se prepara después de mostrar la app para no retrasar el arranque.
   Store.instance.init(game);
@@ -66,7 +72,27 @@ class HomeShell extends StatefulWidget {
   State<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> {
+class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// Al volver a la app se recargan los datos, por si se completó algo desde el widget.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      widget.game.load().then((_) => HomeWidgetSync.pushSoon(widget.game));
+    }
+  }
+
   int _tab = 0;
   static const _tabs = ['tab.missions', 'tab.city', 'tab.achievements', 'tab.progress', 'tab.avatar'];
   bool _showingAchievement = false;

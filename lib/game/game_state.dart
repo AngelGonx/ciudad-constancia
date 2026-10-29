@@ -254,6 +254,8 @@ class GameState extends ChangeNotifier {
   Future<void> load() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      // El widget puede haber cambiado los datos desde otro proceso.
+      await prefs.reload();
       final raw = prefs.getString(_storageKey);
       if (raw == null) {
         _fillSample();
@@ -266,6 +268,9 @@ class GameState extends ChangeNotifier {
     L.lang = language ?? 'es';
     notifyListeners();
   }
+
+  /// Guarda y espera a que termine (para tareas en segundo plano).
+  Future<void> saveNow() => _save();
 
   Future<void> _save() async {
     try {

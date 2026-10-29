@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_title">Pendientes de hoy</string>
+    <string name="widget_description">Tus misiones y hábitos de hoy; tócalos para completarlos.</string>
+    <string name="widget_empty">Abre Pixel To-Do para ver tus pendientes</string>
+</resources>

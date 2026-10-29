@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_title">Today\'s to-dos</string>
+    <string name="widget_description">Your quests and habits for today; tap them to complete.</string>
+    <string name="widget_empty">Open Pixel To-Do to see your to-dos</string>
+</resources>
