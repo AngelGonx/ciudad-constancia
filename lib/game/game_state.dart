@@ -223,6 +223,12 @@ class GameState extends ChangeNotifier {
   int population = 1;
   int totalDone = 0;
   int bestStreak = 0;
+
+  /// Minijuego secreto del gatito piloto.
+  int flightRecord = 0;
+  String flightGoldDay = '';
+  int flightGoldToday = 0;
+  static const int flightGoldPerDay = 20;
   bool isSample = false;
   Avatar avatar = Avatar();
   /// La ciudad (y con ella logros y cosméticos) es la parte de paga.
@@ -316,6 +322,7 @@ class GameState extends ChangeNotifier {
   Map<String, dynamic> _toJson() => {
         'language': language, 'lightTheme': lightTheme, 'name': name, 'xp': xp, 'gold': gold, 'population': population, 'totalDone': totalDone,
         'bestStreak': bestStreak, 'isSample': isSample, 'avatar': avatar.toJson(),
+        'flightRecord': flightRecord, 'flightGoldDay': flightGoldDay, 'flightGoldToday': flightGoldToday,
         'cityUnlocked': testMode, 'cityPurchased': cityPurchased, 'mapSize': mapSize,
         'achievements': unlockedAchievements.toList(),
         'remindersOn': remindersOn, 'reminderMinutes': reminderMinutes,
@@ -333,6 +340,9 @@ class GameState extends ChangeNotifier {
     population = (j['population'] as num?)?.toInt() ?? 1;
     totalDone = (j['totalDone'] as num?)?.toInt() ?? 0;
     bestStreak = (j['bestStreak'] as num?)?.toInt() ?? 0;
+    flightRecord = (j['flightRecord'] as num?)?.toInt() ?? 0;
+    flightGoldDay = j['flightGoldDay'] as String? ?? '';
+    flightGoldToday = (j['flightGoldToday'] as num?)?.toInt() ?? 0;
     isSample = j['isSample'] as bool? ?? false;
     avatar = Avatar.fromJson((j['avatar'] as Map?)?.cast<String, dynamic>() ?? {});
     testMode = j['cityUnlocked'] as bool? ?? false;
@@ -547,6 +557,24 @@ class GameState extends ChangeNotifier {
     if (b == null) return;
     b.color = color;
     _commit();
+  }
+
+  /// Oro que todavía se puede ganar hoy en el minijuego.
+  int get flightGoldLeft =>
+      flightGoldDay == today() ? max(0, flightGoldPerDay - flightGoldToday) : flightGoldPerDay;
+
+  /// Termina una partida: guarda el récord y entrega el oro (con tope diario). Regresa el oro entregado.
+  int finishFlight(int score, int coins) {
+    if (flightGoldDay != today()) {
+      flightGoldDay = today();
+      flightGoldToday = 0;
+    }
+    final given = min(coins, flightGoldLeft);
+    flightGoldToday += given;
+    gold += given;
+    if (score > flightRecord) flightRecord = score;
+    _commit();
+    return given;
   }
 
   void setTestMode(bool value) {

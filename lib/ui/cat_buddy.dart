@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../game/game_state.dart';
 import '../i18n/strings.dart';
+import '../screens/flight_game.dart';
 import 'pixel.dart';
 
 /// Cuántas frases tiene el gatito en cada idioma (claves cat.1 … cat.N).
@@ -29,6 +30,11 @@ class _CatBuddyState extends State<CatBuddy> with SingleTickerProviderStateMixin
   bool _blink = false;
   Timer? _blinkTimer;
 
+  /// Secreto: 25 toques en 10 segundos abren el minijuego.
+  static const int _secretTaps = 25;
+  static const Duration _secretWindow = Duration(seconds: 10);
+  final List<DateTime> _taps = [];
+
   @override
   void initState() {
     super.initState();
@@ -50,6 +56,15 @@ class _CatBuddyState extends State<CatBuddy> with SingleTickerProviderStateMixin
   }
 
   void _talk() {
+    final now = DateTime.now();
+    _taps
+      ..add(now)
+      ..removeWhere((t) => now.difference(t) > _secretWindow);
+    if (_taps.length >= _secretTaps) {
+      _taps.clear();
+      _openSecret();
+      return;
+    }
     final g = widget.game;
     var i = _rnd.nextInt(catPhraseCount) + 1;
     if (i == _last) i = i % catPhraseCount + 1;
@@ -70,6 +85,23 @@ class _CatBuddyState extends State<CatBuddy> with SingleTickerProviderStateMixin
     _hide?.cancel();
     _hide = Timer(const Duration(seconds: 6), () {
       if (mounted) setState(() => _phrase = null);
+    });
+  }
+
+  void _openSecret() {
+    setState(() => _phrase = L.t('egg.found'));
+    _hop.forward(from: 0);
+    _hide?.cancel();
+    _hide = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _phrase = null);
+    });
+    Future<void>.delayed(const Duration(milliseconds: 600), () {
+      if (!mounted) return;
+      Navigator.of(context).push(PageRouteBuilder<void>(
+        transitionDuration: const Duration(milliseconds: 350),
+        pageBuilder: (_, __, ___) => FlightGame(game: widget.game),
+        transitionsBuilder: (_, anim, __, child) => FadeTransition(opacity: anim, child: child),
+      ));
     });
   }
 
