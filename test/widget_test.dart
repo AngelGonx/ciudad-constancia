@@ -41,6 +41,7 @@ void main() {
   test('completar y desmarcar una misión regresa todo', () async {
     final g = GameState();
     await g.load();
+    g.enterDemo(); // datos de ejemplo, sin guardar
     final t = g.tasks.firstWhere((t) => !t.isHabit);
     final xp = g.xp, gold = g.gold;
     final r = g.complete(t);
@@ -54,6 +55,7 @@ void main() {
   test('la checklist completa la tarea al marcar el último paso', () async {
     final g = GameState();
     await g.load();
+    g.enterDemo(); // datos de ejemplo, sin guardar
     final t = g.tasks.firstWhere((t) => !t.isHabit);
     t.steps = [SubStep('a'), SubStep('b')];
     expect(g.toggleStep(t, 0).completed, isNull);
@@ -63,6 +65,16 @@ void main() {
     g.toggleStep(t, 0); // desmarcar un paso desmarca la tarea
     expect(t.doneToday, isFalse);
     expect(t.stepsDone, 1);
+  });
+
+  test('el tutorial no cambia los datos reales', () async {
+    final g = GameState();
+    await g.load();
+    g.addTask('Real', 'mision', 'facil');
+    g.enterDemo();
+    expect(g.tasks.length, greaterThan(1));
+    g.exitDemo();
+    expect(g.tasks.single.title, 'Real');
   });
 
   test('un día libre salva la racha si faltó un día', () async {
@@ -98,6 +110,8 @@ void main() {
     await tester.pumpWidget(PixelTodoApp(game: g));
     await tester.pump();
     expect(find.text('Misiones'), findsWidgets);
-    expect(find.text('Tender la cama'), findsOneWidget);
+    // Primer inicio: sin tareas de ejemplo y con recordatorios apagados.
+    expect(g.tasks, isEmpty);
+    expect(g.remindersOn, isFalse);
   });
 }

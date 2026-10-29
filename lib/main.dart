@@ -112,9 +112,11 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     setState(() => _tab = 0);
     await Future<void>.delayed(const Duration(milliseconds: 100));
     if (!mounted) return;
+    widget.game.enterDemo(); // ejemplos solo durante el tutorial
     await showTutorial(context, _keys, replay: replay);
+    widget.game.exitDemo();
     _tutorialOpen = false;
-    if (!replay) widget.game.finishTutorial(startFresh: true);
+    if (!replay) widget.game.markTutorialSeen();
   }
 
   /// Muestra, uno por uno, los logros recién ganados.

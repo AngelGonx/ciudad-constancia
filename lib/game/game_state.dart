@@ -307,14 +307,15 @@ class GameState extends ChangeNotifier {
       // El widget puede haber cambiado los datos desde otro proceso.
       await prefs.reload();
       final raw = prefs.getString(_storageKey);
+      if (_demo) return; // durante el tutorial no se tocan los datos de ejemplo
       if (raw == null) {
-        _fillSample();
+        _freshStart();
       } else {
         _fromJson(jsonDecode(raw) as Map<String, dynamic>);
         if (_applyFreezes()) await _save();
       }
     } catch (_) {
-      _fillSample();
+      _freshStart();
     }
     L.lang = language ?? 'es';
     notifyListeners();
@@ -366,6 +367,7 @@ class GameState extends ChangeNotifier {
   Future<void> saveNow() => _save();
 
   Future<void> _save() async {
+    if (_demo) return; // los datos de ejemplo del tutorial nunca se guardan
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_storageKey, jsonEncode(_toJson()));
@@ -385,7 +387,55 @@ class GameState extends ChangeNotifier {
     }
     notifyListeners();
     _save();
-    onChanged?.call(this);
+    if (!_demo) onChanged?.call(this);
+  }
+
+  // ---------- modo ejemplo del tutorial ----------
+
+  bool _demo = false;
+  Map<String, dynamic>? _realData;
+  bool get inDemo => _demo;
+
+  /// Cambia a datos de ejemplo para el tutorial, sin guardar nada.
+  void enterDemo() {
+    if (_demo) return;
+    _realData = _toJson();
+    _demo = true;
+    final keepAvatar = avatar, keepName = name;
+    _fillSample();
+    avatar = keepAvatar;
+    name = keepName;
+    notifyListeners();
+  }
+
+  /// Regresa los datos reales tal como estaban antes del tutorial.
+  void exitDemo() {
+    if (!_demo) return;
+    final real = _realData;
+    _demo = false;
+    _realData = null;
+    pendingAchievements.clear();
+    lastFreezeUsed = 0;
+    if (real != null) _fromJson(real);
+    L.lang = language ?? 'es';
+    notifyListeners();
+  }
+
+  /// Primer inicio: todo desde cero, con los recordatorios apagados.
+  void _freshStart() {
+    isSample = false;
+    tutorialSeen = false;
+    remindersOn = false;
+    name = L.t('mayor');
+    xp = 0;
+    gold = 100;
+    population = 1;
+    totalDone = 0;
+    bestStreak = 0;
+    mapSize = mapExpansions.first.size;
+    buildings = [Placed(id: 1, type: 'hogar', x: 3, y: 3, color: homeBuilding.base)];
+    tasks = [];
+    history = {today(): DayStat()};
   }
 
   void _checkAchievements() {
@@ -672,14 +722,9 @@ class GameState extends ChangeNotifier {
     return given;
   }
 
-  /// Al terminar o saltar el tutorial: la app queda desde cero para empezar la rutina.
-  void finishTutorial({required bool startFresh}) {
+  void markTutorialSeen() {
     tutorialSeen = true;
-    if (startFresh) {
-      reset();
-    } else {
-      _commit();
-    }
+    _commit();
   }
 
   void markSecretFound() {
@@ -914,7 +959,8 @@ class GameState extends ChangeNotifier {
     final firstTime = language == null;
     language = lang;
     L.lang = lang;
-    if (firstTime && isSample && lang != 'es') _fillSample();
+    // El nombre por defecto del alcalde se traduce al elegir idioma.
+    if (firstTime && (name == 'Alcalde' || name == 'Mayor')) name = L.t('mayor');
     _commit();
   }
 
