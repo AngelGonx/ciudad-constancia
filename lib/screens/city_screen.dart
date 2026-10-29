@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../game/game_state.dart';
 import '../game/rules.dart';
 import '../i18n/strings.dart';
+import '../services/sounds.dart';
 import '../services/store.dart';
 import '../ui/building_art.dart';
 import '../ui/city_view.dart';
@@ -59,6 +60,7 @@ class _CityScreenState extends State<CityScreen> {
           return;
         }
         if (g.place(type, (_placingColor ?? Color(type.base)).toARGB32(), x, y)) {
+          Sounds.build();
           if (type.id == 'palacio') {
             showPixelDialog(context, L.t('c.palaceTitle'), L.t('c.palaceBody'));
           } else {

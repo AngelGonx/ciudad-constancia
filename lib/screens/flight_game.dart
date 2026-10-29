@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../game/game_state.dart';
 import '../i18n/strings.dart';
+import '../services/sounds.dart';
 import '../ui/pixel.dart';
 
 /// Minijuego secreto: el gatito vuela en un avioncito de juguete esquivando
@@ -74,18 +75,25 @@ class _FlightGameState extends State<FlightGame> with SingleTickerProviderStateM
       ..repeat();
     _clock.start();
     _reset();
+    Sounds.startMusic();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _ticker.dispose();
+    Sounds.stopMusic();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed && phase == _Phase.playing) paused = true;
+    if (state == AppLifecycleState.resumed) {
+      Sounds.resumeMusic();
+    } else {
+      Sounds.pauseMusic();
+      if (phase == _Phase.playing) paused = true;
+    }
   }
 
   void _reset() {
@@ -123,6 +131,7 @@ class _FlightGameState extends State<FlightGame> with SingleTickerProviderStateM
       case _Phase.ready:
         phase = _Phase.playing;
         vy = -150;
+        Sounds.flap();
         break;
       case _Phase.playing:
         if (paused) {
@@ -130,6 +139,7 @@ class _FlightGameState extends State<FlightGame> with SingleTickerProviderStateM
           _last = _clock.elapsedMilliseconds / 1000;
         }
         vy = -150;
+        Sounds.flap();
         break;
       case _Phase.over:
         // Pequeña pausa para no reiniciar sin querer al chocar.
@@ -146,6 +156,7 @@ class _FlightGameState extends State<FlightGame> with SingleTickerProviderStateM
     overAt = time;
     newRecord = score > widget.game.flightRecord;
     lastGold = widget.game.finishFlight(score, coins);
+    Sounds.crash();
     HapticFeedback.mediumImpact();
   }
 
@@ -202,6 +213,7 @@ class _FlightGameState extends State<FlightGame> with SingleTickerProviderStateM
       if (!c.taken && plane.inflate(2).overlaps(Rect.fromLTWH(c.x, c.y - 4, 8, 8))) {
         c.taken = true;
         coins++;
+        Sounds.coin();
         HapticFeedback.lightImpact();
       }
     }
@@ -237,6 +249,8 @@ class _FlightGameState extends State<FlightGame> with SingleTickerProviderStateM
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
+                  const SizedBox(width: 8),
+                  _MusicButton(game: widget.game),
                   const Spacer(),
                   AnimatedBuilder(
                     animation: _ticker,
@@ -482,4 +496,37 @@ class _FlightPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_FlightPainter old) => true;
+}
+
+/// Botón para apagar o prender la música del minijuego.
+class _MusicButton extends StatefulWidget {
+  final GameState game;
+  const _MusicButton({required this.game});
+
+  @override
+  State<_MusicButton> createState() => _MusicButtonState();
+}
+
+class _MusicButtonState extends State<_MusicButton> {
+  @override
+  Widget build(BuildContext context) {
+    final on = widget.game.musicOn;
+    return PixelButton(
+      label: on ? L.t('egg.musicOn') : L.t('egg.musicOff'),
+      color: on ? C.panel2 : C.bad,
+      textColor: C.fg,
+      fontSize: 11,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      onPressed: () {
+        widget.game.setMusic(!on);
+        Sounds.musicOn = !on;
+        if (on) {
+          Sounds.stopMusic();
+        } else {
+          Sounds.startMusic();
+        }
+        setState(() {});
+      },
+    );
+  }
 }

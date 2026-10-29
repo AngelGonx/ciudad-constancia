@@ -4,6 +4,7 @@ import '../game/game_state.dart';
 import '../game/rules.dart';
 import '../i18n/strings.dart';
 import '../services/reminders.dart';
+import '../services/sounds.dart';
 import '../ui/cat_buddy.dart';
 import '../ui/pixel.dart';
 import '../ui/time_picker.dart';
@@ -86,6 +87,7 @@ class _MissionsScreenState extends State<MissionsScreen> {
     }
     final r = g.complete(t);
     if (r.levelTo > r.levelFrom) {
+      Sounds.levelUp();
       final unlocked = catalog.where((b) => b.level > r.levelFrom && b.level <= r.levelTo).map((b) => b.name);
       showPixelDialog(
         context,
@@ -94,6 +96,7 @@ class _MissionsScreenState extends State<MissionsScreen> {
       );
       return;
     }
+    Sounds.task();
     var msg = L.f('m.gain', {'xp': r.xp, 'gold': r.gold});
     if (r.streakBonusPct > 0) msg += L.f('m.streakBonus', {'n': r.streakBonusPct});
     if (r.reduced) msg += L.t('m.reduced');

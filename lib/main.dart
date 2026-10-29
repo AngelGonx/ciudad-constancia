@@ -13,6 +13,7 @@ import 'screens/progress_screen.dart';
 import 'screens/settings_screen.dart';
 import 'services/home_widget_sync.dart';
 import 'services/reminders.dart';
+import 'services/sounds.dart';
 import 'services/store.dart';
 import 'ui/pixel.dart';
 import 'ui/sprites.dart';
@@ -23,6 +24,7 @@ Future<void> main() async {
   await game.load();
   await Reminders.init();
   await HomeWidgetSync.init();
+  await Sounds.init();
   game.onChanged = (g) {
     Reminders.scheduleSoon(g);
     HomeWidgetSync.pushSoon(g);
@@ -46,6 +48,8 @@ class PixelTodoApp extends StatelessWidget {
         // Idioma y tema se aplican aquí para que toda la app se redibuje al cambiarlos.
         L.lang = game.language ?? 'es';
         C.useLight(game.lightTheme);
+        Sounds.sfxOn = game.soundOn;
+        Sounds.musicOn = game.musicOn;
         final iconBrightness = game.lightTheme ? Brightness.dark : Brightness.light;
         SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
           statusBarColor: C.bg,
@@ -109,6 +113,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       L.f('ach.unlockedGold', {'n': fmt(a.gold)}),
       if (a.cosmetic != null) L.f('ach.unlockedCosmetic', {'name': L.t('acc.${a.cosmetic}')}),
     ];
+    Sounds.levelUp();
     showPixelDialog(context, '${L.t('ach.unlockedTitle')}\n${L.t('ach.$id')}', lines.join('\n')).then((_) {
       _showingAchievement = false;
       if (mounted) _showPendingAchievements();

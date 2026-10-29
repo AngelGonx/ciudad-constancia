@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../game/game_state.dart';
 import '../i18n/strings.dart';
 import '../services/reminders.dart';
+import '../services/sounds.dart';
 import '../ui/pixel.dart';
 import '../ui/time_picker.dart';
 
@@ -61,6 +62,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: Wrap(spacing: 8, runSpacing: 8, children: [
                     PixelChoice(label: L.t('s.dark'), selected: !g.lightTheme, onTap: () => g.setLightTheme(false)),
                     PixelChoice(label: L.t('s.light'), selected: g.lightTheme, onTap: () => g.setLightTheme(true)),
+                  ]),
+                ),
+                _Section(
+                  title: L.t('s.sound'),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(L.t('s.sfx'), style: T.body(14)),
+                    const SizedBox(height: 8),
+                    Wrap(spacing: 8, runSpacing: 8, children: [
+                      PixelChoice(label: L.t('s.on'), selected: g.soundOn, onTap: () {
+                        g.setSound(true);
+                        Sounds.sfxOn = true;
+                        Sounds.task();
+                      }),
+                      PixelChoice(label: L.t('s.off'), selected: !g.soundOn, onTap: () => g.setSound(false)),
+                    ]),
+                    const SizedBox(height: 12),
+                    Text(L.t('s.music'), style: T.body(14)),
+                    const SizedBox(height: 8),
+                    Wrap(spacing: 8, runSpacing: 8, children: [
+                      PixelChoice(label: L.t('s.on'), selected: g.musicOn, onTap: () => g.setMusic(true)),
+                      PixelChoice(label: L.t('s.off'), selected: !g.musicOn, onTap: () => g.setMusic(false)),
+                    ]),
                   ]),
                 ),
                 _Section(

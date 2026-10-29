@@ -217,6 +217,8 @@ class GameState extends ChangeNotifier {
   /// Idioma elegido ('es' o 'en'); null hasta que se elige en el primer inicio.
   String? language;
   bool lightTheme = false;
+  bool soundOn = true;
+  bool musicOn = true;
   String name = 'Alcalde';
   int xp = 0;
   int gold = 100;
@@ -320,7 +322,7 @@ class GameState extends ChangeNotifier {
   }
 
   Map<String, dynamic> _toJson() => {
-        'language': language, 'lightTheme': lightTheme, 'name': name, 'xp': xp, 'gold': gold, 'population': population, 'totalDone': totalDone,
+        'language': language, 'lightTheme': lightTheme, 'soundOn': soundOn, 'musicOn': musicOn, 'name': name, 'xp': xp, 'gold': gold, 'population': population, 'totalDone': totalDone,
         'bestStreak': bestStreak, 'isSample': isSample, 'avatar': avatar.toJson(),
         'flightRecord': flightRecord, 'flightGoldDay': flightGoldDay, 'flightGoldToday': flightGoldToday,
         'cityUnlocked': testMode, 'cityPurchased': cityPurchased, 'mapSize': mapSize,
@@ -334,6 +336,8 @@ class GameState extends ChangeNotifier {
   void _fromJson(Map<String, dynamic> j) {
     language = j['language'] as String?;
     lightTheme = j['lightTheme'] as bool? ?? false;
+    soundOn = j['soundOn'] as bool? ?? true;
+    musicOn = j['musicOn'] as bool? ?? true;
     name = j['name'] as String? ?? 'Alcalde';
     xp = (j['xp'] as num?)?.toInt() ?? 0;
     gold = (j['gold'] as num?)?.toInt() ?? 0;
@@ -755,6 +759,16 @@ class GameState extends ChangeNotifier {
     language = lang;
     L.lang = lang;
     if (firstTime && isSample && lang != 'es') _fillSample();
+    _commit();
+  }
+
+  void setSound(bool on) {
+    soundOn = on;
+    _commit();
+  }
+
+  void setMusic(bool on) {
+    musicOn = on;
     _commit();
   }
 
