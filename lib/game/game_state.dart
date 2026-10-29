@@ -269,6 +269,7 @@ class GameState extends ChangeNotifier {
   /// Minijuego secreto del gatito piloto.
   int flightRecord = 0;
   bool foundSecret = false; // ya abrió alguna vez el minijuego
+  bool tutorialSeen = false; // ya vio (o saltó) el tutorial del primer inicio
   String flightGoldDay = '';
   int flightGoldToday = 0;
   static const int flightGoldPerDay = 20;
@@ -409,7 +410,7 @@ class GameState extends ChangeNotifier {
         'language': language, 'lightTheme': lightTheme, 'soundOn': soundOn, 'musicOn': musicOn, 'name': name, 'xp': xp, 'gold': gold, 'population': population, 'totalDone': totalDone,
         'bestStreak': bestStreak, 'isSample': isSample, 'avatar': avatar.toJson(),
         'streakFreezes': streakFreezes,
-        'flightRecord': flightRecord, 'foundSecret': foundSecret, 'flightGoldDay': flightGoldDay, 'flightGoldToday': flightGoldToday,
+        'flightRecord': flightRecord, 'foundSecret': foundSecret, 'tutorialSeen': tutorialSeen, 'flightGoldDay': flightGoldDay, 'flightGoldToday': flightGoldToday,
         'cityUnlocked': testMode, 'cityPurchased': cityPurchased, 'mapSize': mapSize,
         'achievements': unlockedAchievements.toList(),
         'remindersOn': remindersOn, 'reminderMinutes': reminderMinutes,
@@ -435,6 +436,8 @@ class GameState extends ChangeNotifier {
     flightGoldDay = j['flightGoldDay'] as String? ?? '';
     flightGoldToday = (j['flightGoldToday'] as num?)?.toInt() ?? 0;
     isSample = j['isSample'] as bool? ?? false;
+    // Quien ya tenía la app instalada no ve el tutorial a la fuerza (puede abrirlo en Ajustes).
+    tutorialSeen = j['tutorialSeen'] as bool? ?? true;
     avatar = Avatar.fromJson((j['avatar'] as Map?)?.cast<String, dynamic>() ?? {});
     testMode = j['cityUnlocked'] as bool? ?? false;
     cityPurchased = j['cityPurchased'] as bool? ?? false;
@@ -471,6 +474,7 @@ class GameState extends ChangeNotifier {
   /// Datos de ejemplo para la primera vez que se abre la app.
   void _fillSample() {
     isSample = true;
+    tutorialSeen = false;
     name = L.t('mayor');
     xp = 2350;
     gold = 480;
@@ -666,6 +670,16 @@ class GameState extends ChangeNotifier {
     if (score > flightRecord) flightRecord = score;
     _commit();
     return given;
+  }
+
+  /// Al terminar o saltar el tutorial: la app queda desde cero para empezar la rutina.
+  void finishTutorial({required bool startFresh}) {
+    tutorialSeen = true;
+    if (startFresh) {
+      reset();
+    } else {
+      _commit();
+    }
   }
 
   void markSecretFound() {

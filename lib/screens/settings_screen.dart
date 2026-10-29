@@ -10,7 +10,8 @@ import '../ui/time_picker.dart';
 /// Pantalla del engranaje: estudio, idioma, tema y datos.
 class SettingsScreen extends StatefulWidget {
   final GameState game;
-  const SettingsScreen({super.key, required this.game});
+  final VoidCallback? onTutorial;
+  const SettingsScreen({super.key, required this.game, this.onTutorial});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -64,6 +65,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     PixelChoice(label: L.t('s.light'), selected: g.lightTheme, onTap: () => g.setLightTheme(true)),
                   ]),
                 ),
+                if (widget.onTutorial != null)
+                  _Section(
+                    title: L.t('s.help'),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: PixelButton(
+                        label: L.t('s.tutorial'),
+                        color: C.panel2,
+                        textColor: C.fg,
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          Future<void>.delayed(const Duration(milliseconds: 350), widget.onTutorial!);
+                        },
+                      ),
+                    ),
+                  ),
                 _Section(
                   title: L.t('s.sound'),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

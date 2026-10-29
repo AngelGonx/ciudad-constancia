@@ -17,6 +17,7 @@ import 'services/sounds.dart';
 import 'services/store.dart';
 import 'ui/pixel.dart';
 import 'ui/sprites.dart';
+import 'ui/tutorial.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -100,6 +101,21 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   int _tab = 0;
   static const _tabs = ['tab.missions', 'tab.city', 'tab.achievements', 'tab.progress', 'tab.avatar'];
   bool _showingAchievement = false;
+  final _keys = TutorialKeys();
+  bool _tutorialOpen = false;
+
+  /// Tutorial guiado por el gatito. En el primer inicio, al terminar o saltarlo, la app queda desde cero.
+  Future<void> _startTutorial({bool replay = false}) async {
+    if (_tutorialOpen) return;
+    _tutorialOpen = true;
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() => _tab = 0);
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    if (!mounted) return;
+    await showTutorial(context, _keys, replay: replay);
+    _tutorialOpen = false;
+    if (!replay) widget.game.finishTutorial(startFresh: true);
+  }
 
   /// Muestra, uno por uno, los logros recién ganados.
   void _showPendingAchievements() {
@@ -122,20 +138,26 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
   void _openSettings() {
     FocusManager.instance.primaryFocus?.unfocus();
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SettingsScreen(game: widget.game)));
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => SettingsScreen(game: widget.game, onTutorial: () => _startTutorial(replay: true)),
+    ));
   }
 
   @override
   Widget build(BuildContext context) {
     final g = widget.game;
     final pages = <Widget>[
-      MissionsScreen(game: g),
+      MissionsScreen(game: g, keys: _keys),
       CityScreen(game: g),
       AchievementsScreen(game: g),
       ProgressScreen(game: g),
       AvatarScreen(game: g),
     ];
-    if (g.pendingAchievements.isNotEmpty) {
+    if (!g.tutorialSeen && !_tutorialOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !widget.game.tutorialSeen) _startTutorial();
+      });
+    } else if (g.pendingAchievements.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _showPendingAchievements();
       });
@@ -145,7 +167,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       body: SafeArea(
         bottom: false,
         child: Column(children: [
-          _Header(game: g, onSettings: _openSettings),
+          _Header(game: g, onSettings: _openSettings, keys: _keys),
           Expanded(
             child: IndexedStack(
               index: _tab,
@@ -171,6 +193,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 2),
                     child: _TabButton(
+                      key: _keys.tabs[i],
                       label: L.t(_tabs[i]),
                       selected: i == _tab,
                       onTap: () {
@@ -192,7 +215,7 @@ class _TabButton extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback onTap;
-  const _TabButton({required this.label, required this.selected, required this.onTap});
+  const _TabButton({super.key, required this.label, required this.selected, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -225,7 +248,8 @@ class _TabButton extends StatelessWidget {
 class _Header extends StatelessWidget {
   final GameState game;
   final VoidCallback onSettings;
-  const _Header({required this.game, required this.onSettings});
+  final TutorialKeys keys;
+  const _Header({required this.game, required this.onSettings, required this.keys});
 
   @override
   Widget build(BuildContext context) {
@@ -247,7 +271,7 @@ class _Header extends StatelessWidget {
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child: Column(key: keys.xp, crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
               PixelChip(L.f('hdr.level', {'n': lvl}), color: C.xp),
               const SizedBox(width: 6),
@@ -262,7 +286,7 @@ class _Header extends StatelessWidget {
           ]),
         ),
         const SizedBox(width: 10),
-        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+        Column(key: keys.gold, crossAxisAlignment: CrossAxisAlignment.end, children: [
           Row(mainAxisSize: MainAxisSize.min, children: [
             const Coin(),
             const SizedBox(width: 6),
@@ -272,7 +296,7 @@ class _Header extends StatelessWidget {
           Text(L.f('hdr.today', {'n': fmt(game.goldToday)}), style: T.body(12, C.dim)),
         ]),
         const SizedBox(width: 10),
-        GearButton(onTap: onSettings),
+        KeyedSubtree(key: keys.gear, child: GearButton(onTap: onSettings)),
       ]),
     );
   }

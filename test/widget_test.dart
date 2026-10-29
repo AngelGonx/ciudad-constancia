@@ -94,6 +94,7 @@ void main() {
     final g = GameState();
     await g.load();
     g.setLanguage('es');
+    g.tutorialSeen = true; // el tutorial se prueba aparte
     await tester.pumpWidget(PixelTodoApp(game: g));
     await tester.pump();
     expect(find.text('Misiones'), findsWidgets);

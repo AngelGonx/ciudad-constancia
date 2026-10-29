@@ -232,3 +232,19 @@ class _CatPainter extends CustomPainter {
   @override
   bool shouldRepaint(_CatPainter old) => old.blink != blink;
 }
+
+/// El gatito oficial como imagen suelta (para el tutorial y otros lugares).
+class PixelCat extends StatelessWidget {
+  final double width;
+  final bool blink;
+  const PixelCat({super.key, this.width = 96, this.blink = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width,
+      height: width * 84 / 96,
+      child: CustomPaint(painter: _CatPainter(blink: blink)),
+    );
+  }
+}

@@ -8,10 +8,12 @@ import '../services/sounds.dart';
 import '../ui/cat_buddy.dart';
 import '../ui/pixel.dart';
 import '../ui/time_picker.dart';
+import '../ui/tutorial.dart';
 
 class MissionsScreen extends StatefulWidget {
   final GameState game;
-  const MissionsScreen({super.key, required this.game});
+  final TutorialKeys? keys;
+  const MissionsScreen({super.key, required this.game, this.keys});
 
   @override
   State<MissionsScreen> createState() => _MissionsScreenState();
@@ -169,15 +171,8 @@ class _MissionsScreenState extends State<MissionsScreen> {
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
-          if (g.isSample) ...[
-            Container(
-              padding: const EdgeInsets.only(left: 10),
-              decoration: BoxDecoration(border: Border(left: BorderSide(color: C.gold, width: 4))),
-              child: Text(L.t('m.sample'), style: T.body(14, C.dim)),
-            ),
-            const SizedBox(height: 16),
-          ],
           PixelBox(
+            key: widget.keys?.today,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -206,6 +201,7 @@ class _MissionsScreenState extends State<MissionsScreen> {
           ),
           const SizedBox(height: 16),
           _AddForm(
+            key: widget.keys?.form,
             controller: _title,
             focusNode: _titleFocus,
             kind: _kind,
@@ -236,8 +232,10 @@ class _MissionsScreenState extends State<MissionsScreen> {
           ],
           if (habits.isEmpty)
             _Empty(g.tasks.any((t) => t.isHabit) ? L.t('m.habitsDone') : L.t('m.habitsEmpty'))
-          else
-            ...habits.map(row),
+          else ...[
+            KeyedSubtree(key: widget.keys?.habit, child: row(habits.first)),
+            ...habits.skip(1).map(row),
+          ],
           const SizedBox(height: 20),
           SectionTitle(L.t('m.missions')),
           const SizedBox(height: 8),
@@ -288,6 +286,7 @@ class _AddForm extends StatelessWidget {
   final ValueChanged<int> onRemoveStep;
   final VoidCallback onSubmit;
   const _AddForm({
+    super.key,
     required this.steps,
     required this.stepInput,
     required this.onAddStep,
