@@ -77,13 +77,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       }),
                       PixelChoice(label: L.t('s.off'), selected: !g.soundOn, onTap: () => g.setSound(false)),
                     ]),
-                    const SizedBox(height: 12),
-                    Text(L.t('s.music'), style: T.body(14)),
-                    const SizedBox(height: 8),
-                    Wrap(spacing: 8, runSpacing: 8, children: [
-                      PixelChoice(label: L.t('s.on'), selected: g.musicOn, onTap: () => g.setMusic(true)),
-                      PixelChoice(label: L.t('s.off'), selected: !g.musicOn, onTap: () => g.setMusic(false)),
-                    ]),
+                    // La música solo aparece después de descubrir el minijuego secreto.
+                    if (g.foundSecret) ...[
+                      const SizedBox(height: 12),
+                      Text(L.t('s.music'), style: T.body(14)),
+                      const SizedBox(height: 8),
+                      Wrap(spacing: 8, runSpacing: 8, children: [
+                        PixelChoice(label: L.t('s.on'), selected: g.musicOn, onTap: () => g.setMusic(true)),
+                        PixelChoice(label: L.t('s.off'), selected: !g.musicOn, onTap: () => g.setMusic(false)),
+                      ]),
+                    ],
                   ]),
                 ),
                 _Section(

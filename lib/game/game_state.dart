@@ -268,6 +268,7 @@ class GameState extends ChangeNotifier {
 
   /// Minijuego secreto del gatito piloto.
   int flightRecord = 0;
+  bool foundSecret = false; // ya abrió alguna vez el minijuego
   String flightGoldDay = '';
   int flightGoldToday = 0;
   static const int flightGoldPerDay = 20;
@@ -408,7 +409,7 @@ class GameState extends ChangeNotifier {
         'language': language, 'lightTheme': lightTheme, 'soundOn': soundOn, 'musicOn': musicOn, 'name': name, 'xp': xp, 'gold': gold, 'population': population, 'totalDone': totalDone,
         'bestStreak': bestStreak, 'isSample': isSample, 'avatar': avatar.toJson(),
         'streakFreezes': streakFreezes,
-        'flightRecord': flightRecord, 'flightGoldDay': flightGoldDay, 'flightGoldToday': flightGoldToday,
+        'flightRecord': flightRecord, 'foundSecret': foundSecret, 'flightGoldDay': flightGoldDay, 'flightGoldToday': flightGoldToday,
         'cityUnlocked': testMode, 'cityPurchased': cityPurchased, 'mapSize': mapSize,
         'achievements': unlockedAchievements.toList(),
         'remindersOn': remindersOn, 'reminderMinutes': reminderMinutes,
@@ -429,6 +430,7 @@ class GameState extends ChangeNotifier {
     totalDone = (j['totalDone'] as num?)?.toInt() ?? 0;
     bestStreak = (j['bestStreak'] as num?)?.toInt() ?? 0;
     flightRecord = (j['flightRecord'] as num?)?.toInt() ?? 0;
+    foundSecret = j['foundSecret'] as bool? ?? flightRecord > 0;
     streakFreezes = (j['streakFreezes'] as num?)?.toInt() ?? 0;
     flightGoldDay = j['flightGoldDay'] as String? ?? '';
     flightGoldToday = (j['flightGoldToday'] as num?)?.toInt() ?? 0;
@@ -664,6 +666,12 @@ class GameState extends ChangeNotifier {
     if (score > flightRecord) flightRecord = score;
     _commit();
     return given;
+  }
+
+  void markSecretFound() {
+    if (foundSecret) return;
+    foundSecret = true;
+    _commit();
   }
 
   void setTestMode(bool value) {

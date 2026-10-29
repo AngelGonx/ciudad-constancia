@@ -75,6 +75,7 @@ class _FlightGameState extends State<FlightGame> with SingleTickerProviderStateM
       ..repeat();
     _clock.start();
     _reset();
+    widget.game.markSecretFound();
     Sounds.startMusic();
   }
 
