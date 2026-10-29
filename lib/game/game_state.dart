@@ -13,6 +13,27 @@ String dayKey(DateTime d) =>
 String dayOffset(int days) => dayKey(DateTime.now().add(Duration(days: days)));
 String today() => dayKey(DateTime.now());
 
+/// Paso de una checklist. En hábitos se reinicia cada día.
+class SubStep {
+  String title;
+  String? doneOn; // día en que se marcó
+  SubStep(this.title, {this.doneOn});
+
+  Map<String, dynamic> toJson() => {'title': title, 'doneOn': doneOn};
+  factory SubStep.fromJson(Map<String, dynamic> j) =>
+      SubStep(j['title'] as String? ?? '', doneOn: j['doneOn'] as String?);
+}
+
+/// Resultado de marcar un paso.
+class StepResult {
+  final CompleteResult? completed; // la tarea se completó con este paso
+  final int freshInkWait; // minutos que faltan si aún no se puede completar
+  final bool undone; // se desmarcó una tarea que estaba completada
+  final int done;
+  final int total;
+  const StepResult({this.completed, this.freshInkWait = 0, this.undone = false, this.done = 0, this.total = 0});
+}
+
 class Task {
   String id;
   String title;
@@ -29,6 +50,13 @@ class Task {
 
   /// Cómo contó la última vez que se completó (para regresarlo al desmarcar).
   String? countedAs;
+
+  /// Checklist opcional; la tarea se completa al marcar todos los pasos.
+  List<SubStep> steps = [];
+
+  bool get hasSteps => steps.isNotEmpty;
+  bool stepDone(SubStep s) => isHabit ? s.doneOn == today() : s.doneOn != null;
+  int get stepsDone => steps.where(stepDone).length;
 
   /// Cuándo se creó (ms). Las tareas recién creadas esperan unos minutos ("tinta fresca").
   int? createdAt;
@@ -80,6 +108,7 @@ class Task {
         'last': last, 'done': done, 'prevLast': prevLast, 'prevStreak': prevStreak,
         'earnedXp': earnedXp, 'earnedGold': earnedGold, 'earnedPeople': earnedPeople, 'reminder': reminder, 'due': due,
         'countedAs': countedAs, 'createdAt': createdAt,
+        'steps': steps.map((s) => s.toJson()).toList(),
       };
 
   factory Task.fromJson(Map<String, dynamic> j) => Task(
@@ -99,7 +128,9 @@ class Task {
         due: (j['due'] as num?)?.toInt(),
         countedAs: j['countedAs'] as String?,
         createdAt: (j['createdAt'] as num?)?.toInt(),
-      );
+      )..steps = ((j['steps'] as List?) ?? const [])
+          .map((e) => SubStep.fromJson((e as Map).cast<String, dynamic>()))
+          .toList();
 }
 
 /// Avatar: los colores se guardan como ARGB para permitir cualquier color.
@@ -226,6 +257,15 @@ class GameState extends ChangeNotifier {
   int totalDone = 0;
   int bestStreak = 0;
 
+  /// Días libres: protegen las rachas si un día no se cumplen los hábitos.
+  int streakFreezes = 0;
+  static const int maxFreezes = 3;
+  static const int freezePrice = 250;
+
+  /// Último uso automático de días libres (para avisar en pantalla una vez).
+  int lastFreezeUsed = 0;
+  int lastFreezeSaved = 0;
+
   /// Minijuego secreto del gatito piloto.
   int flightRecord = 0;
   String flightGoldDay = '';
@@ -269,12 +309,55 @@ class GameState extends ChangeNotifier {
         _fillSample();
       } else {
         _fromJson(jsonDecode(raw) as Map<String, dynamic>);
+        if (_applyFreezes()) await _save();
       }
     } catch (_) {
       _fillSample();
     }
     L.lang = language ?? 'es';
     notifyListeners();
+  }
+
+  static int _dayNum(String key) {
+    final p = key.split('-').map(int.parse).toList();
+    return DateTime.utc(p[0], p[1], p[2]).millisecondsSinceEpoch ~/ 86400000;
+  }
+
+  /// Si hubo días sin cumplir hábitos, usa días libres para salvar las rachas.
+  /// Un día libre cubre todos los hábitos de ese día. Regresa true si cambió algo.
+  bool _applyFreezes() {
+    if (streakFreezes <= 0) return false;
+    final todayN = _dayNum(today());
+    final gaps = <Task, int>{};
+    for (final t in tasks) {
+      final last = t.last;
+      if (!t.isHabit || t.streak <= 0 || last == null) continue;
+      final missed = todayN - _dayNum(last) - 1;
+      if (missed > 0) gaps[t] = missed;
+    }
+    final saveable = gaps.values.where((g) => g <= streakFreezes);
+    if (saveable.isEmpty) return false;
+    final used = saveable.reduce(max);
+    streakFreezes -= used;
+    var saved = 0;
+    final yesterday = dayOffset(-1);
+    gaps.forEach((t, g) {
+      if (g <= used) {
+        t.last = yesterday; // la racha sigue como si se hubiera cumplido ayer
+        saved++;
+      }
+    });
+    lastFreezeUsed = used;
+    lastFreezeSaved = saved;
+    return true;
+  }
+
+  bool buyFreeze() {
+    if (streakFreezes >= maxFreezes || gold < freezePrice) return false;
+    gold -= freezePrice;
+    streakFreezes++;
+    _commit();
+    return true;
   }
 
   /// Guarda y espera a que termine (para tareas en segundo plano).
@@ -324,6 +407,7 @@ class GameState extends ChangeNotifier {
   Map<String, dynamic> _toJson() => {
         'language': language, 'lightTheme': lightTheme, 'soundOn': soundOn, 'musicOn': musicOn, 'name': name, 'xp': xp, 'gold': gold, 'population': population, 'totalDone': totalDone,
         'bestStreak': bestStreak, 'isSample': isSample, 'avatar': avatar.toJson(),
+        'streakFreezes': streakFreezes,
         'flightRecord': flightRecord, 'flightGoldDay': flightGoldDay, 'flightGoldToday': flightGoldToday,
         'cityUnlocked': testMode, 'cityPurchased': cityPurchased, 'mapSize': mapSize,
         'achievements': unlockedAchievements.toList(),
@@ -345,6 +429,7 @@ class GameState extends ChangeNotifier {
     totalDone = (j['totalDone'] as num?)?.toInt() ?? 0;
     bestStreak = (j['bestStreak'] as num?)?.toInt() ?? 0;
     flightRecord = (j['flightRecord'] as num?)?.toInt() ?? 0;
+    streakFreezes = (j['streakFreezes'] as num?)?.toInt() ?? 0;
     flightGoldDay = j['flightGoldDay'] as String? ?? '';
     flightGoldToday = (j['flightGoldToday'] as num?)?.toInt() ?? 0;
     isSample = j['isSample'] as bool? ?? false;
@@ -614,7 +699,8 @@ class GameState extends ChangeNotifier {
 
   // ---------- acciones ----------
 
-  void addTask(String title, String kind, String diff, {int? reminder, DateTime? due}) {
+  void addTask(String title, String kind, String diff,
+      {int? reminder, DateTime? due, List<String> steps = const []}) {
     final isHabit = kind == 'habito';
     tasks.insert(
       0,
@@ -626,7 +712,7 @@ class GameState extends ChangeNotifier {
         reminder: isHabit ? reminder : null,
         due: isHabit ? null : due?.millisecondsSinceEpoch,
         createdAt: DateTime.now().millisecondsSinceEpoch,
-      ),
+      )..steps = [for (final s in steps) if (s.trim().isNotEmpty) SubStep(s.trim())],
     );
     _commit();
   }
@@ -708,7 +794,55 @@ class GameState extends ChangeNotifier {
   }
 
   /// Desmarca una tarea completada hoy y regresa sus recompensas.
-  void undo(Task t) {
+  // ---------- checklist ----------
+
+  void addStep(Task t, String title) {
+    final clean = title.trim();
+    if (clean.isEmpty || t.steps.length >= 12) return;
+    t.steps.add(SubStep(clean));
+    _commit();
+  }
+
+  void removeStep(Task t, int i) {
+    if (i < 0 || i >= t.steps.length) return;
+    t.steps.removeAt(i);
+    _commit();
+  }
+
+  /// Marca o desmarca un paso. Al marcar el último, la tarea se completa sola.
+  StepResult toggleStep(Task t, int i) {
+    if (i < 0 || i >= t.steps.length) return const StepResult();
+    final s = t.steps[i];
+    if (t.stepDone(s)) {
+      if (t.doneToday) undo(t, keepSteps: true); // se regresan las recompensas
+      s.doneOn = null;
+      _commit();
+      return StepResult(undone: true, done: t.stepsDone, total: t.steps.length);
+    }
+    final isLast = t.stepsDone == t.steps.length - 1;
+    if (isLast && t.freshInkLeft > 0) {
+      return StepResult(freshInkWait: t.freshInkLeft, done: t.stepsDone, total: t.steps.length);
+    }
+    s.doneOn = today();
+    if (isLast && !t.doneToday) {
+      final r = complete(t);
+      return StepResult(completed: r, done: t.stepsDone, total: t.steps.length);
+    }
+    _commit();
+    return StepResult(done: t.stepsDone, total: t.steps.length);
+  }
+
+  /// Para el widget: marca el siguiente paso pendiente.
+  StepResult checkNextStep(Task t) {
+    for (var i = 0; i < t.steps.length; i++) {
+      if (!t.stepDone(t.steps[i])) return toggleStep(t, i);
+    }
+    return StepResult(done: t.stepsDone, total: t.steps.length);
+  }
+
+  void undo(Task t, {bool keepSteps = false}) {
+    // Al desmarcar una tarea con checklist se desmarca su último paso.
+    if (!keepSteps && t.hasSteps && t.stepsDone == t.steps.length) t.steps.last.doneOn = null;
     if (t.isHabit) {
       t.last = t.prevLast;
       t.streak = t.prevStreak;

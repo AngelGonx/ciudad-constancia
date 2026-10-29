@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -47,6 +49,37 @@ void main() {
     g.undo(t);
     expect(g.xp, xp);
     expect(g.gold, gold);
+  });
+
+  test('la checklist completa la tarea al marcar el último paso', () async {
+    final g = GameState();
+    await g.load();
+    final t = g.tasks.firstWhere((t) => !t.isHabit);
+    t.steps = [SubStep('a'), SubStep('b')];
+    expect(g.toggleStep(t, 0).completed, isNull);
+    expect(t.doneToday, isFalse);
+    expect(g.toggleStep(t, 1).completed, isNotNull);
+    expect(t.doneToday, isTrue);
+    g.toggleStep(t, 0); // desmarcar un paso desmarca la tarea
+    expect(t.doneToday, isFalse);
+    expect(t.stepsDone, 1);
+  });
+
+  test('un día libre salva la racha si faltó un día', () async {
+    SharedPreferences.setMockInitialValues({
+      'pixel_todo_state_v1': jsonEncode({
+        'language': 'es',
+        'streakFreezes': 1,
+        'tasks': [
+          {'id': 'h1', 'title': 'Leer', 'kind': 'habito', 'diff': 'facil', 'streak': 5, 'last': dayOffset(-2)},
+        ],
+      }),
+    });
+    final g = GameState();
+    await g.load();
+    expect(g.streakFreezes, 0);
+    expect(g.tasks.first.last, dayOffset(-1));
+    expect(g.tasks.first.currentStreak, 5);
   });
 
   testWidgets('primer inicio pide idioma', (tester) async {

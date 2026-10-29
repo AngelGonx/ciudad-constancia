@@ -51,7 +51,7 @@ class HomeWidgetSync {
         final d = difficulties[t.diff]!;
         data['task_${i}_id'] = t.id;
         data['task_${i}_title'] = t.title;
-        data['task_${i}_meta'] = '+${d.gold}';
+        data['task_${i}_meta'] = t.hasSteps ? '${t.stepsDone}/${t.steps.length}' : '+${d.gold}';
         data['task_${i}_habit'] = t.isHabit;
         data['task_${i}_done'] = t.doneToday;
       }
@@ -79,6 +79,18 @@ Future<void> widgetBackgroundCallback(Uri? uri) async {
     final t = matches.first;
     if (t.doneToday) {
       message = L.t('w.already');
+    } else if (t.hasSteps) {
+      // Con checklist, cada toque marca el siguiente paso.
+      final r = g.checkNextStep(t);
+      final c = r.completed;
+      if (r.freshInkWait > 0) {
+        message = L.f('m.freshInk', {'n': r.freshInkWait});
+      } else if (c != null) {
+        message = L.f('w.done', {'xp': c.xp, 'gold': c.gold});
+      } else {
+        message = L.f('w.step', {'n': r.done, 'm': r.total});
+      }
+      await g.saveNow();
     } else if (t.freshInkLeft > 0) {
       message = L.f('m.freshInk', {'n': t.freshInkLeft});
     } else {
