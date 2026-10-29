@@ -75,8 +75,9 @@ class _FlightGameState extends State<FlightGame> with SingleTickerProviderStateM
       ..repeat();
     _clock.start();
     _reset();
-    widget.game.markSecretFound();
     Sounds.startMusic();
+    // Guardar fuera de la construcción de la pantalla para no redibujar toda la app a la mitad.
+    WidgetsBinding.instance.addPostFrameCallback((_) => widget.game.markSecretFound());
   }
 
   @override
