@@ -6,6 +6,7 @@ import 'package:home_widget/home_widget.dart';
 import '../game/game_state.dart';
 import '../game/rules.dart';
 import '../i18n/strings.dart';
+import '../ui/pixel.dart' show fmt;
 import 'reminders.dart';
 
 /// Sincroniza la app con el widget de pantalla de inicio.
