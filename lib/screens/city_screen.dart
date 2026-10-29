@@ -232,7 +232,7 @@ class _SelectedPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final type = building.kind;
-    final refund = (type.cost * demolishRefund).round();
+    final refund = game.refundOf(type);
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
       children: [
@@ -319,7 +319,11 @@ class _Shop extends StatelessWidget {
                   Row(children: [
                     const Coin(),
                     const SizedBox(width: 6),
-                    Text(fmt(b.cost), style: T.display(12, C.gold)),
+                    Text(fmt(game.costOf(b)), style: T.display(12, C.gold)),
+                    if (game.costOf(b) > b.cost) ...[
+                      const SizedBox(width: 6),
+                      Text(L.t('c.inflation'), style: T.body(11, C.dim)),
+                    ],
                   ]),
                 ]),
               ),

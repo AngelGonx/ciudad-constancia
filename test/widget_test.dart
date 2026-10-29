@@ -16,6 +16,26 @@ void main() {
     expect(levelOf(10000), 10);
   });
 
+  test('balance: rendimiento decreciente, racha e inflación', () {
+    expect(rewardFactor(0), 1.0);
+    expect(rewardFactor(7), 1.0);
+    expect(rewardFactor(8), 0.5);
+    expect(rewardFactor(14), 0.1);
+    expect(streakBonus(1), 0);
+    expect(streakBonus(6), closeTo(0.25, 1e-9));
+    expect(streakBonus(40), 0.5);
+    expect(inflatedCost(100, 0), 100);
+    expect(inflatedCost(100, 1), 115);
+    expect(inflatedCost(100, 2), 132);
+  });
+
+  test('una tarea recién creada espera la tinta fresca', () async {
+    final g = GameState();
+    await g.load();
+    g.addTask('Nueva', 'mision', 'media');
+    expect(g.tasks.first.freshInkLeft, greaterThan(0));
+  });
+
   test('completar y desmarcar una misión regresa todo', () async {
     final g = GameState();
     await g.load();

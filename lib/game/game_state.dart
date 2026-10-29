@@ -27,6 +27,12 @@ class Task {
   int earnedGold;
   int earnedPeople;
 
+  /// Cómo contó la última vez que se completó (para regresarlo al desmarcar).
+  String? countedAs;
+
+  /// Cuándo se creó (ms). Las tareas recién creadas esperan unos minutos ("tinta fresca").
+  int? createdAt;
+
   /// Hábitos: minutos desde medianoche para el recordatorio diario, o null.
   int? reminder;
 
@@ -51,7 +57,17 @@ class Task {
     this.earnedPeople = 0,
     this.reminder,
     this.due,
+    this.countedAs,
+    this.createdAt,
   });
+
+  /// Minutos que faltan para poder completarla, o 0.
+  int get freshInkLeft {
+    final c = createdAt;
+    if (c == null) return 0;
+    final left = freshInkMinutes * 60000 - (DateTime.now().millisecondsSinceEpoch - c);
+    return left <= 0 ? 0 : (left / 60000).ceil();
+  }
 
   bool get isHabit => kind == 'habito';
   bool get doneToday => isHabit ? last == today() : done == today();
@@ -63,6 +79,7 @@ class Task {
         'id': id, 'title': title, 'kind': kind, 'diff': diff, 'streak': streak,
         'last': last, 'done': done, 'prevLast': prevLast, 'prevStreak': prevStreak,
         'earnedXp': earnedXp, 'earnedGold': earnedGold, 'earnedPeople': earnedPeople, 'reminder': reminder, 'due': due,
+        'countedAs': countedAs, 'createdAt': createdAt,
       };
 
   factory Task.fromJson(Map<String, dynamic> j) => Task(
@@ -80,6 +97,8 @@ class Task {
         earnedPeople: (j['earnedPeople'] as num?)?.toInt() ?? 0,
         reminder: (j['reminder'] as num?)?.toInt(),
         due: (j['due'] as num?)?.toInt(),
+        countedAs: j['countedAs'] as String?,
+        createdAt: (j['createdAt'] as num?)?.toInt(),
       );
 }
 
@@ -130,12 +149,18 @@ class DayStat {
   int xp;
   int gold;
   int happy; // felicidad más alta de la ciudad ese día
-  DayStat({this.xp = 0, this.gold = 0, this.happy = 0});
-  Map<String, dynamic> toJson() => {'xp': xp, 'gold': gold, 'happy': happy};
+  int done; // tareas completadas ese día
+  int epic; // épicas que pagaron como épicas
+  int hard; // difíciles que pagaron como difíciles
+  DayStat({this.xp = 0, this.gold = 0, this.happy = 0, this.done = 0, this.epic = 0, this.hard = 0});
+  Map<String, dynamic> toJson() => {'xp': xp, 'gold': gold, 'happy': happy, 'done': done, 'epic': epic, 'hard': hard};
   factory DayStat.fromJson(Map<String, dynamic> j) => DayStat(
         xp: (j['xp'] as num?)?.toInt() ?? 0,
         gold: (j['gold'] as num?)?.toInt() ?? 0,
         happy: (j['happy'] as num?)?.toInt() ?? 0,
+        done: (j['done'] as num?)?.toInt() ?? 0,
+        epic: (j['epic'] as num?)?.toInt() ?? 0,
+        hard: (j['hard'] as num?)?.toInt() ?? 0,
       );
 }
 
@@ -180,7 +205,10 @@ class CompleteResult {
   final int levelFrom;
   final int levelTo;
   final bool newRecord;
-  const CompleteResult(this.xp, this.gold, this.arrived, this.levelFrom, this.levelTo, this.newRecord);
+  final int streakBonusPct; // bonus de racha aplicado al oro
+  final bool reduced; // pagó menos por rendimiento decreciente o límite de dificultad
+  const CompleteResult(this.xp, this.gold, this.arrived, this.levelFrom, this.levelTo, this.newRecord,
+      {this.streakBonusPct = 0, this.reduced = false});
 }
 
 class GameState extends ChangeNotifier {
@@ -482,7 +510,7 @@ class GameState extends ChangeNotifier {
 
   bool place(BuildingType type, int color, int x, int y) {
     if (blockReason(type) != null || !canPlace(x, y)) return false;
-    gold -= type.cost;
+    gold -= costOf(type);
     buildings.add(Placed(id: _newBuildingId(), type: type.id, x: x, y: y, color: color));
     _commit();
     return true;
@@ -501,7 +529,7 @@ class GameState extends ChangeNotifier {
   int demolish(int id) {
     final b = placedById(id);
     if (b == null || !b.kind.demolishable) return -1;
-    final refund = (b.kind.cost * demolishRefund).round();
+    final refund = refundOf(b.kind);
     buildings.remove(b);
     gold += refund;
     population = max(1, min(population, city().housing));
@@ -560,6 +588,7 @@ class GameState extends ChangeNotifier {
         diff: diff,
         reminder: isHabit ? reminder : null,
         due: isHabit ? null : due?.millisecondsSinceEpoch,
+        createdAt: DateTime.now().millisecondsSinceEpoch,
       ),
     );
     _commit();
@@ -570,12 +599,41 @@ class GameState extends ChangeNotifier {
     _commit();
   }
 
+  /// Tareas que todavía pagan completo hoy.
+  int get fullRewardsLeft => max(0, fullRewardsPerDay - (history[today()]?.done ?? 0));
+
+  /// Bonus de oro (en %) que daría completar hoy este hábito.
+  int nextStreakBonusPct(Task t) {
+    if (!t.isHabit) return 0;
+    final next = t.doneToday ? t.streak : (t.last == dayOffset(-1) ? t.streak + 1 : 1);
+    return (streakBonus(next) * 100).round();
+  }
+
   CompleteResult complete(Task t) {
-    final d = difficulties[t.diff]!;
     final c = city();
     final prevRecord = goldRecord;
     final before = level;
-    final earned = (d.gold * (1 + c.bonus)).round();
+    final h = todayStat;
+
+    // Límite de dificultad: después de cierto número al día, paga como media.
+    var counted = t.diff;
+    if (counted == 'epica') {
+      if (h.epic < epicPerDay) {
+        h.epic++;
+      } else {
+        counted = 'media';
+      }
+    } else if (counted == 'dificil') {
+      if (h.hard < hardPerDay) {
+        h.hard++;
+      } else {
+        counted = 'media';
+      }
+    }
+    t.countedAs = counted;
+    final d = difficulties[counted]!;
+    final factor = rewardFactor(h.done);
+    h.done++;
 
     if (t.isHabit) {
       t.prevLast = t.last;
@@ -587,6 +645,10 @@ class GameState extends ChangeNotifier {
       t.done = today();
     }
 
+    final streakB = t.isHabit ? streakBonus(t.streak) : 0.0;
+    final gainedXp = max(1, (d.xp * factor).round());
+    final earned = max(1, (d.gold * factor * (1 + c.bonus + streakB)).round());
+
     var arrived = 0;
     if (population < c.housing && c.acceptsNewcomers) {
       final wanted = (t.diff == 'dificil' || t.diff == 'epica') ? 2 : 1;
@@ -594,18 +656,18 @@ class GameState extends ChangeNotifier {
       population += arrived;
     }
 
-    t.earnedXp = d.xp;
+    t.earnedXp = gainedXp;
     t.earnedGold = earned;
     t.earnedPeople = arrived;
-    xp += d.xp;
+    xp += gainedXp;
     gold += earned;
     totalDone++;
-    final h = todayStat;
-    h.xp += d.xp;
+    h.xp += gainedXp;
     h.gold += earned;
 
     _commit();
-    return CompleteResult(d.xp, earned, arrived, before, level, h.gold > prevRecord && prevRecord > 0);
+    return CompleteResult(gainedXp, earned, arrived, before, level, h.gold > prevRecord && prevRecord > 0,
+        streakBonusPct: (streakB * 100).round(), reduced: factor < 1 || counted != t.diff);
   }
 
   /// Desmarca una tarea completada hoy y regresa sus recompensas.
@@ -623,6 +685,10 @@ class GameState extends ChangeNotifier {
     final h = todayStat;
     h.xp = max(0, h.xp - t.earnedXp);
     h.gold = max(0, h.gold - t.earnedGold);
+    h.done = max(0, h.done - 1);
+    if (t.countedAs == 'epica') h.epic = max(0, h.epic - 1);
+    if (t.countedAs == 'dificil') h.hard = max(0, h.hard - 1);
+    t.countedAs = null;
     t.earnedXp = 0;
     t.earnedGold = 0;
     t.earnedPeople = 0;
@@ -638,9 +704,17 @@ class GameState extends ChangeNotifier {
       if (c.happiness < palaceHappiness) return L.f('c.reasonHappy', {'n': palaceHappiness});
       if (population < palacePopulation) return L.f('c.reasonPop', {'n': palacePopulation});
     }
-    if (gold < b.cost) return L.t('c.reasonGold');
+    if (gold < costOf(b)) return L.t('c.reasonGold');
     return null;
   }
+
+  int _countOf(String typeId) => buildings.where((p) => p.type == typeId).length;
+
+  /// Precio actual con inflación: sube 15% por cada copia ya construida.
+  int costOf(BuildingType b) => inflatedCost(b.cost, _countOf(b.id));
+
+  /// Al demoler se recupera la mitad de lo que costó la última copia.
+  int refundOf(BuildingType b) => (inflatedCost(b.cost, max(0, _countOf(b.id) - 1)) * demolishRefund).round();
 
   /// Elige idioma. En el primer inicio, los datos de ejemplo se rehacen en ese idioma.
   void setLanguage(String lang) {

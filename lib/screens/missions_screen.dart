@@ -79,6 +79,11 @@ class _MissionsScreenState extends State<MissionsScreen> {
       g.undo(t);
       return;
     }
+    final wait = t.freshInkLeft;
+    if (wait > 0) {
+      showToast(context, L.f('m.freshInk', {'n': wait}));
+      return;
+    }
     final r = g.complete(t);
     if (r.levelTo > r.levelFrom) {
       final unlocked = catalog.where((b) => b.level > r.levelFrom && b.level <= r.levelTo).map((b) => b.name);
@@ -90,6 +95,8 @@ class _MissionsScreenState extends State<MissionsScreen> {
       return;
     }
     var msg = L.f('m.gain', {'xp': r.xp, 'gold': r.gold});
+    if (r.streakBonusPct > 0) msg += L.f('m.streakBonus', {'n': r.streakBonusPct});
+    if (r.reduced) msg += L.t('m.reduced');
     if (r.newRecord) {
       msg += L.t('m.newRecord');
     } else if (r.arrived > 0) {
@@ -109,6 +116,7 @@ class _MissionsScreenState extends State<MissionsScreen> {
 
     Widget row(Task t) => _TaskRow(
           task: t,
+          streakBonusPct: g.nextStreakBonusPct(t),
           onToggle: () => _toggle(t),
           onDelete: () => g.deleteTask(t),
           onReminder: () => _editAlert(t),
@@ -145,6 +153,13 @@ class _MissionsScreenState extends State<MissionsScreen> {
                       ? L.t('m.bestDay')
                       : L.f('m.toRecord', {'n': fmt((record - goldToday).clamp(0, record).toInt())}),
                   style: T.body(13, C.dim),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  g.fullRewardsLeft > 0
+                      ? L.f('m.fullLeft', {'n': g.fullRewardsLeft, 'max': fullRewardsPerDay})
+                      : L.t('m.fullNone'),
+                  style: T.body(13, g.fullRewardsLeft > 0 ? C.fg : C.bad),
                 ),
               ],
             ),
@@ -309,7 +324,14 @@ class _TaskRow extends StatelessWidget {
   final VoidCallback onToggle;
   final VoidCallback onDelete;
   final VoidCallback onReminder;
-  const _TaskRow({required this.task, required this.onToggle, required this.onDelete, required this.onReminder});
+  final int streakBonusPct;
+  const _TaskRow({
+    required this.task,
+    required this.onToggle,
+    required this.onDelete,
+    required this.onReminder,
+    this.streakBonusPct = 0,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -354,6 +376,7 @@ class _TaskRow extends StatelessWidget {
                   PixelChip(d.name, color: C.forDifficulty(d.id)),
                   Text(L.f('m.gain', {'xp': d.xp, 'gold': d.gold}), style: T.body(12, C.dim)),
                   if (streak > 0) PixelChip(L.f('m.streak', {'n': streak}), color: C.bad, textColor: C.fg),
+                  if (streakBonusPct > 0) PixelChip(L.f('m.streakChip', {'n': streakBonusPct}), color: C.gold),
                   _AlertChip(task: task, onTap: onReminder),
                 ]),
               ]),

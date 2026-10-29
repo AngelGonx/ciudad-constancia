@@ -1,5 +1,7 @@
 // Reglas del juego: dificultades, niveles y catálogo de edificios.
 
+import 'dart:math';
+
 import '../i18n/strings.dart';
 
 class Difficulty {
@@ -202,3 +204,27 @@ const List<MapExpansion> mapExpansions = [
 
 /// Lo que se devuelve al demoler.
 const double demolishRefund = 0.5;
+
+// ---------- Balance de recompensas ----------
+
+/// Tareas por día que pagan completo; después pagan la mitad y luego el 10%.
+const int fullRewardsPerDay = 8;
+const int halfRewardsPerDay = 14;
+
+/// Cuántas épicas y difíciles al día pagan como tales; las demás pagan como media.
+const int epicPerDay = 1;
+const int hardPerDay = 3;
+
+/// Minutos que debe esperar una tarea recién creada para poder completarse.
+const int freshInkMinutes = 10;
+
+/// Bonus de oro por racha: +5% por día de racha, hasta +50%.
+double streakBonus(int streak) => min(0.5, max(0, streak - 1) * 0.05);
+
+/// Factor de recompensa según cuántas tareas ya se completaron hoy.
+double rewardFactor(int doneToday) =>
+    doneToday < fullRewardsPerDay ? 1.0 : (doneToday < halfRewardsPerDay ? 0.5 : 0.1);
+
+/// Inflación: cada copia del mismo edificio cuesta 15% más que la anterior.
+const double inflationRate = 1.15;
+int inflatedCost(int base, int alreadyBuilt) => (base * pow(inflationRate, alreadyBuilt)).round();
